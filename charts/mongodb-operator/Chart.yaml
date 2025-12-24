@@ -2,8 +2,8 @@ apiVersion: v2
 name: mongodb-operator
 description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded Clusters
 type: application
-version: 0.0.1
-appVersion: "0.0.1"
+version: 0.0.2
+appVersion: "0.0.2"
 kubeVersion: ">=1.26.0-0"
 
 keywords:
@@ -114,7 +114,7 @@ annotations:
   artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/images: |
     - name: mongodb-operator
-      image: keiailab/mongodb-operator:0.0.1
+      image: keiailab/mongodb-operator:0.0.2
     - name: mongodb
       image: mongo:8.2
     - name: mongodb-exporter
@@ -122,13 +122,9 @@ annotations:
   artifacthub.io/prerelease: "true"
   artifacthub.io/changes: |
     - kind: added
-      description: Initial pre-release for testing
-    - kind: added
-      description: MongoDB ReplicaSet CRD and controller
-    - kind: added
-      description: MongoDB Sharded Cluster CRD and controller
-    - kind: added
-      description: MongoDBBackup CRD and controller
+      description: Verified Publisher configuration for ArtifactHub
+    - kind: changed
+      description: Updated repository metadata with repository ID
   artifacthub.io/recommendations: |
     - url: https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
     - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
