@@ -1,0 +1,261 @@
+/*
+Copyright 2024 Keiailab.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package v1alpha1
+
+import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// MongoDBShardedSpec defines the desired state of MongoDBSharded
+type MongoDBShardedSpec struct {
+	// Version defines MongoDB version configuration
+	Version MongoDBVersion `json:"version"`
+
+	// ConfigServer defines config server configuration
+	ConfigServer ConfigServerSpec `json:"configServer"`
+
+	// Shards defines shard configuration
+	Shards ShardSpec `json:"shards"`
+
+	// Mongos defines mongos router configuration
+	Mongos MongosSpec `json:"mongos"`
+
+	// TLS defines TLS configuration
+	// +optional
+	TLS *TLSSpec `json:"tls,omitempty"`
+
+	// Auth defines authentication configuration
+	Auth AuthSpec `json:"auth"`
+
+	// Monitoring defines monitoring configuration
+	// +optional
+	Monitoring *MonitoringSpec `json:"monitoring,omitempty"`
+
+	// Backup defines backup configuration
+	// +optional
+	Backup *BackupSpec `json:"backup,omitempty"`
+
+	// AdditionalConfig allows passing additional MongoDB configuration
+	// +optional
+	AdditionalConfig map[string]string `json:"additionalConfig,omitempty"`
+}
+
+// ConfigServerSpec defines config server configuration
+type ConfigServerSpec struct {
+	// Members is the number of config server replica set members
+	// +kubebuilder:validation:Enum=1;3
+	// +kubebuilder:default=3
+	Members int32 `json:"members"`
+
+	// Storage defines storage configuration
+	// +optional
+	Storage StorageSpec `json:"storage,omitempty"`
+
+	// Resources defines resource requirements
+	// +optional
+	Resources ResourcesSpec `json:"resources,omitempty"`
+
+	// Pod defines pod-level configuration
+	// +optional
+	Pod *PodSpec `json:"pod,omitempty"`
+}
+
+// ShardSpec defines shard configuration
+type ShardSpec struct {
+	// Count is the number of shards
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=2
+	Count int32 `json:"count"`
+
+	// MembersPerShard is the number of replica set members per shard
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=3
+	MembersPerShard int32 `json:"membersPerShard"`
+
+	// Storage defines storage configuration for each shard
+	// +optional
+	Storage StorageSpec `json:"storage,omitempty"`
+
+	// Resources defines resource requirements for each shard member
+	// +optional
+	Resources ResourcesSpec `json:"resources,omitempty"`
+
+	// Pod defines pod-level configuration
+	// +optional
+	Pod *PodSpec `json:"pod,omitempty"`
+
+	// AutoScaling defines shard auto-scaling configuration
+	// +optional
+	AutoScaling *ShardAutoScalingSpec `json:"autoScaling,omitempty"`
+}
+
+// ShardAutoScalingSpec defines shard auto-scaling
+type ShardAutoScalingSpec struct {
+	// Enabled enables shard auto-scaling
+	Enabled bool `json:"enabled"`
+
+	// MinShards is the minimum number of shards
+	MinShards int32 `json:"minShards,omitempty"`
+
+	// MaxShards is the maximum number of shards
+	MaxShards int32 `json:"maxShards"`
+
+	// Metrics defines scaling metrics
+	// +optional
+	Metrics []AutoScalingMetric `json:"metrics,omitempty"`
+}
+
+// MongosSpec defines mongos router configuration
+type MongosSpec struct {
+	// Replicas is the number of mongos instances
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=2
+	Replicas int32 `json:"replicas"`
+
+	// Resources defines resource requirements
+	// +optional
+	Resources ResourcesSpec `json:"resources,omitempty"`
+
+	// Pod defines pod-level configuration
+	// +optional
+	Pod *PodSpec `json:"pod,omitempty"`
+
+	// Service defines mongos service configuration
+	// +optional
+	Service *MongosServiceSpec `json:"service,omitempty"`
+
+	// AutoScaling defines mongos auto-scaling configuration
+	// +optional
+	AutoScaling *AutoScalingSpec `json:"autoScaling,omitempty"`
+}
+
+// MongosServiceSpec defines mongos service configuration
+type MongosServiceSpec struct {
+	// Type is the service type
+	// +kubebuilder:validation:Enum=ClusterIP;NodePort;LoadBalancer
+	// +kubebuilder:default="ClusterIP"
+	Type string `json:"type,omitempty"`
+
+	// Port is the service port
+	// +kubebuilder:default=27017
+	Port int32 `json:"port,omitempty"`
+
+	// Annotations are additional service annotations
+	// +optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+
+	// LoadBalancerIP is the load balancer IP (for LoadBalancer type)
+	// +optional
+	LoadBalancerIP string `json:"loadBalancerIP,omitempty"`
+}
+
+// MongoDBShardedStatus defines the observed state of MongoDBSharded
+type MongoDBShardedStatus struct {
+	// Phase represents the current phase
+	// +kubebuilder:validation:Enum=Pending;Initializing;Running;Failed;Upgrading
+	Phase string `json:"phase,omitempty"`
+
+	// ConfigServerStatus contains config server status
+	ConfigServer ComponentStatus `json:"configServer,omitempty"`
+
+	// ShardsStatus contains status of each shard
+	// +optional
+	Shards []ShardStatus `json:"shards,omitempty"`
+
+	// MongosStatus contains mongos status
+	Mongos ComponentStatus `json:"mongos,omitempty"`
+
+	// Conditions represents the latest available observations
+	// +optional
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
+
+	// ConnectionString is the MongoDB connection URI (via mongos)
+	ConnectionString string `json:"connectionString,omitempty"`
+
+	// LastBackup contains information about the last backup
+	// +optional
+	LastBackup *BackupStatus `json:"lastBackup,omitempty"`
+
+	// ShardedCollections lists sharded collections
+	// +optional
+	ShardedCollections []string `json:"shardedCollections,omitempty"`
+
+	// ObservedGeneration is the most recent generation observed
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+}
+
+// ComponentStatus represents the status of a cluster component
+type ComponentStatus struct {
+	// Ready is the number of ready replicas
+	Ready int32 `json:"ready,omitempty"`
+
+	// Total is the total number of replicas
+	Total int32 `json:"total,omitempty"`
+
+	// Phase is the component phase
+	Phase string `json:"phase,omitempty"`
+}
+
+// ShardStatus represents the status of a shard
+type ShardStatus struct {
+	// Name is the shard name
+	Name string `json:"name"`
+
+	// Ready is the number of ready members
+	Ready int32 `json:"ready"`
+
+	// Total is the total number of members
+	Total int32 `json:"total"`
+
+	// Primary is the primary member name
+	// +optional
+	Primary string `json:"primary,omitempty"`
+
+	// Phase is the shard phase
+	Phase string `json:"phase,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+// +kubebuilder:subresource:status
+// +kubebuilder:resource:shortName=mdbsh
+// +kubebuilder:printcolumn:name="Phase",type="string",JSONPath=".status.phase"
+// +kubebuilder:printcolumn:name="Shards",type="integer",JSONPath=".spec.shards.count"
+// +kubebuilder:printcolumn:name="Mongos",type="integer",JSONPath=".status.mongos.ready"
+// +kubebuilder:printcolumn:name="Version",type="string",JSONPath=".spec.version.version"
+// +kubebuilder:printcolumn:name="Age",type="date",JSONPath=".metadata.creationTimestamp"
+
+// MongoDBSharded is the Schema for the mongodbshardeds API
+type MongoDBSharded struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
+
+	Spec   MongoDBShardedSpec   `json:"spec,omitempty"`
+	Status MongoDBShardedStatus `json:"status,omitempty"`
+}
+
+// +kubebuilder:object:root=true
+
+// MongoDBShardedList contains a list of MongoDBSharded
+type MongoDBShardedList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []MongoDBSharded `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(&MongoDBSharded{}, &MongoDBShardedList{})
+}

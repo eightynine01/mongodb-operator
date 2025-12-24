@@ -1,0 +1,16 @@
+# Artifact Hub repository metadata
+# https://artifacthub.io/docs/topics/repositories/
+
+# Repository ID (unique identifier for your repository)
+# This will be assigned by ArtifactHub after repository creation
+repositoryID: ""
+
+# Owners configuration for verified publisher status
+owners:
+  - name: keiailab
+    email: support@keiailab.com
+
+# Ignore specific packages or versions
+# ignore:
+#   - name: mongodb-operator
+#     version: "0.0.1"
