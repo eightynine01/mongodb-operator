@@ -333,9 +333,11 @@ func (r *MongoDBShardedReconciler) reconcileConfigServerInit(ctx context.Context
 func (r *MongoDBShardedReconciler) reconcileShardsInit(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) error {
 	logger := log.FromContext(ctx)
 
-	// Initialize the ShardsInitialized slice if needed
-	if len(mdbsh.Status.ShardsInitialized) != int(mdbsh.Spec.Shards.Count) {
-		mdbsh.Status.ShardsInitialized = make([]bool, mdbsh.Spec.Shards.Count)
+	// Initialize or expand the ShardsInitialized slice if needed (preserve existing values on scale-up)
+	if len(mdbsh.Status.ShardsInitialized) < int(mdbsh.Spec.Shards.Count) {
+		newSlice := make([]bool, mdbsh.Spec.Shards.Count)
+		copy(newSlice, mdbsh.Status.ShardsInitialized)
+		mdbsh.Status.ShardsInitialized = newSlice
 	}
 
 	// Shards use port 27018
@@ -434,9 +436,11 @@ func (r *MongoDBShardedReconciler) reconcileShardedAdminUser(ctx context.Context
 func (r *MongoDBShardedReconciler) reconcileAddShards(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) error {
 	logger := log.FromContext(ctx)
 
-	// Initialize the ShardsAdded slice if needed
-	if len(mdbsh.Status.ShardsAdded) != int(mdbsh.Spec.Shards.Count) {
-		mdbsh.Status.ShardsAdded = make([]bool, mdbsh.Spec.Shards.Count)
+	// Initialize or expand the ShardsAdded slice if needed (preserve existing values on scale-up)
+	if len(mdbsh.Status.ShardsAdded) < int(mdbsh.Spec.Shards.Count) {
+		newSlice := make([]bool, mdbsh.Spec.Shards.Count)
+		copy(newSlice, mdbsh.Status.ShardsAdded)
+		mdbsh.Status.ShardsAdded = newSlice
 	}
 
 	// All shards must be initialized first
