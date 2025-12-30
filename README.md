@@ -36,6 +36,12 @@ MongoDB Operator automates the deployment, scaling, and management of MongoDB cl
 │  │                  Resource Builder                           ││
 │  │  (StatefulSets, Deployments, Services, Secrets, Jobs)       ││
 │  └─────────────────────────────────────────────────────────────┘│
+│         │                │                      │                │
+│         ▼                ▼                      ▼                │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │                  MongoDB Package                            ││
+│  │  (Executor, ReplicaSet, Auth, Sharding)                     ││
+│  └─────────────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -52,6 +58,42 @@ MongoDB Operator automates the deployment, scaling, and management of MongoDB cl
 │  └───────────────┘  └───────────────┘  └───────────────┘        │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+### Automatic Initialization
+
+The operator automatically handles MongoDB cluster initialization:
+
+**ReplicaSet Initialization:**
+```
+1. Create Keyfile Secret (for internal auth)
+2. Create ConfigMap (mongod.conf)
+3. Create Services (headless + client)
+4. Create StatefulSet
+5. Wait for all pods ready
+6. Execute rs.initiate() on primary candidate
+7. Wait for primary election
+8. Create admin user (via localhost exception)
+```
+
+**Sharded Cluster Initialization:**
+```
+1. Create shared Keyfile Secret
+2. Deploy Config Server StatefulSet (port 27019)
+3. Deploy Shard StatefulSets (port 27018)
+4. Deploy Mongos Deployment (port 27017)
+5. Initialize Config Server ReplicaSet
+6. Initialize each Shard ReplicaSet
+7. Create admin user on Mongos
+8. Execute sh.addShard() for each shard
+```
+
+### Port Configuration
+
+| Component | Port | Flag |
+|-----------|------|------|
+| Mongos | 27017 | - |
+| Shard | 27018 | `--shardsvr` |
+| Config Server | 27019 | `--configsvr` |
 
 ## Quick Start
 
@@ -159,6 +201,72 @@ spec:
 | `spec.shards.membersPerShard` | Members per shard | `3` |
 | `spec.mongos.replicas` | Mongos router replicas | `2` |
 | `spec.mongos.autoScaling.enabled` | Enable HPA for mongos | `false` |
+
+## Scaling
+
+### Horizontal Scale Out (Adding Shards)
+
+The operator supports dynamic shard scaling. When you increase `spec.shards.count`, the operator automatically:
+
+1. Creates new Shard StatefulSet and headless Service
+2. Waits for all pods to become ready
+3. Initializes the new shard's ReplicaSet (`rs.initiate()`)
+4. Registers the new shard with mongos (`sh.addShard()`)
+5. MongoDB balancer automatically migrates chunks to the new shard
+
+**Example: Scale from 3 to 5 shards**
+
+```bash
+# Check current shard count
+kubectl get mongodbsharded my-cluster -o jsonpath='{.spec.shards.count}'
+# Output: 3
+
+# Scale out to 5 shards
+kubectl patch mongodbsharded my-cluster --type='merge' \
+  -p '{"spec":{"shards":{"count":5}}}'
+
+# Monitor new shard pods
+kubectl get pods -l app.kubernetes.io/component=shard
+
+# Verify shards registered
+kubectl exec -it my-cluster-mongos-xxx -c mongos -- \
+  mongosh -u admin -p $PASSWORD --eval 'sh.status()'
+```
+
+**Status Tracking:**
+```yaml
+status:
+  shardsInitialized: [true, true, true, true, true]
+  shardsAdded: [true, true, true, true, true]
+  shards:
+    - name: my-cluster-shard-0
+      phase: Running
+    - name: my-cluster-shard-1
+      phase: Running
+    - name: my-cluster-shard-2
+      phase: Running
+    - name: my-cluster-shard-3
+      phase: Running
+    - name: my-cluster-shard-4
+      phase: Running
+```
+
+### Vertical Scaling (Resource Adjustment)
+
+Update resource requests/limits:
+
+```bash
+kubectl patch mongodbsharded my-cluster --type='merge' -p '{
+  "spec": {
+    "shards": {
+      "resources": {
+        "requests": {"memory": "2Gi", "cpu": "1"},
+        "limits": {"memory": "4Gi", "cpu": "2"}
+      }
+    }
+  }
+}'
+```
 
 ### MongoDBBackup
 
@@ -280,11 +388,16 @@ Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md)
 
 ## Roadmap
 
+- [x] Automatic ReplicaSet initialization
+- [x] Automatic Sharded Cluster initialization
+- [x] Horizontal shard scaling (scale out)
+- [x] Admin user auto-creation
 - [ ] Point-in-Time Recovery (PITR)
 - [ ] Automated version upgrades
 - [ ] Cross-cluster replication
 - [ ] Grafana dashboard templates
 - [ ] Backup scheduling with CronJob
+- [ ] Scale down with data migration
 
 ## Acknowledgments
 
