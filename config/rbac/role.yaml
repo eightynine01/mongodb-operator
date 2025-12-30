@@ -2,67 +2,102 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: mongodb-operator-manager-role
+  name: manager-role
 rules:
-  # Core resources
-  - apiGroups: [""]
-    resources: ["pods", "pods/exec", "pods/log"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["services", "services/finalizers"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["configmaps", "secrets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["persistentvolumeclaims"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: [""]
-    resources: ["events"]
-    verbs: ["create", "patch"]
-
-  # Apps
-  - apiGroups: ["apps"]
-    resources: ["statefulsets", "deployments"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-  # Policy
-  - apiGroups: ["policy"]
-    resources: ["poddisruptionbudgets"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-  # Networking
-  - apiGroups: ["networking.k8s.io"]
-    resources: ["networkpolicies"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-  # Autoscaling
-  - apiGroups: ["autoscaling"]
-    resources: ["horizontalpodautoscalers"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-  # Monitoring
-  - apiGroups: ["monitoring.coreos.com"]
-    resources: ["servicemonitors", "prometheusrules"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-  # Cert-manager
-  - apiGroups: ["cert-manager.io"]
-    resources: ["certificates", "issuers", "clusterissuers"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-  # Batch (for backup jobs)
-  - apiGroups: ["batch"]
-    resources: ["jobs", "cronjobs"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-
-  # MongoDB CRDs
-  - apiGroups: ["mongodb.keiailab.com"]
-    resources: ["mongodbs", "mongodbs/status", "mongodbs/finalizers"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["mongodb.keiailab.com"]
-    resources: ["mongodbshardeds", "mongodbshardeds/status", "mongodbshardeds/finalizers"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-  - apiGroups: ["mongodb.keiailab.com"]
-    resources: ["mongodbbackups", "mongodbbackups/status", "mongodbbackups/finalizers"]
-    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups:
+  - ""
+  resources:
+  - configmaps
+  - secrets
+  - services
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - create
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  - statefulsets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mongodb.keiailab.com
+  resources:
+  - mongodbbackups
+  - mongodbs
+  - mongodbshardeds
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - mongodb.keiailab.com
+  resources:
+  - mongodbbackups/finalizers
+  - mongodbs/finalizers
+  - mongodbshardeds/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - mongodb.keiailab.com
+  resources:
+  - mongodbbackups/status
+  - mongodbs/status
+  - mongodbshardeds/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - policy
+  resources:
+  - poddisruptionbudgets
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch

@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	mongodbv1alpha1 "github.com/keiailab/mongodb-operator/api/v1alpha1"
+	"github.com/keiailab/mongodb-operator/internal/mongodb"
 	"github.com/keiailab/mongodb-operator/internal/resources"
 )
 
@@ -130,7 +131,41 @@ func (r *MongoDBShardedReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 		return r.updateStatusError(ctx, mdbsh, "Mongos", err)
 	}
 
-	// 7. Update status
+	// 7. Initialize Config Server replica set
+	if !mdbsh.Status.ConfigServerInitialized {
+		if err := r.reconcileConfigServerInit(ctx, mdbsh); err != nil {
+			logger.Info("Failed to initialize config server, will retry", "error", err)
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+
+	// 8. Initialize Shard replica sets
+	if err := r.reconcileShardsInit(ctx, mdbsh); err != nil {
+		logger.Info("Failed to initialize shards, will retry", "error", err)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// 9. Wait for mongos to be ready
+	if !r.isMongosReady(ctx, mdbsh) {
+		logger.Info("Waiting for mongos to be ready")
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// 10. Create admin user
+	if !mdbsh.Status.AdminUserCreated {
+		if err := r.reconcileShardedAdminUser(ctx, mdbsh); err != nil {
+			logger.Info("Failed to create admin user, will retry", "error", err)
+			return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+
+	// 11. Add shards to cluster
+	if err := r.reconcileAddShards(ctx, mdbsh); err != nil {
+		logger.Info("Failed to add shards, will retry", "error", err)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// 12. Update status
 	if err := r.updateStatus(ctx, mdbsh); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -157,8 +192,25 @@ func (r *MongoDBShardedReconciler) handleDeletion(ctx context.Context, mdbsh *mo
 }
 
 func (r *MongoDBShardedReconciler) reconcileKeyfileSecret(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) error {
+	// Check if keyfile secret already exists - DO NOT regenerate if it exists
+	// Keyfile must remain constant across all pods for replica set authentication
+	existingSecret := &corev1.Secret{}
+	secretName := mdbsh.Name + "-keyfile"
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: mdbsh.Namespace}, existingSecret)
+	if err == nil {
+		// Secret exists, do not update
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Secret doesn't exist, create it
 	secret := resources.BuildShardedKeyfileSecret(mdbsh)
-	return r.createOrUpdate(ctx, mdbsh, secret)
+	if err := controllerutil.SetControllerReference(mdbsh, secret, r.Scheme); err != nil {
+		return err
+	}
+	return r.Create(ctx, secret)
 }
 
 func (r *MongoDBShardedReconciler) reconcileConfigServer(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) error {
@@ -223,6 +275,261 @@ func (r *MongoDBShardedReconciler) reconcileMongos(ctx context.Context, mdbsh *m
 	// Deployment
 	deploy := resources.BuildMongosDeployment(mdbsh)
 	return r.createOrUpdate(ctx, mdbsh, deploy)
+}
+
+func (r *MongoDBShardedReconciler) isMongosReady(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) bool {
+	deploy := &appsv1.Deployment{}
+	if err := r.Get(ctx, types.NamespacedName{Name: mdbsh.Name + "-mongos", Namespace: mdbsh.Namespace}, deploy); err != nil {
+		return false
+	}
+	return deploy.Status.ReadyReplicas >= 1
+}
+
+func (r *MongoDBShardedReconciler) reconcileConfigServerInit(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) error {
+	logger := log.FromContext(ctx)
+	logger.Info("Initializing config server replica set")
+
+	// Config servers use port 27019
+	rsManager, err := mongodb.NewReplicaSetManagerWithPort(27019)
+	if err != nil {
+		return fmt.Errorf("failed to create replica set manager: %w", err)
+	}
+
+	// Check if already initialized
+	firstPod := fmt.Sprintf("%s-cfg-0", mdbsh.Name)
+	initialized, err := rsManager.IsInitialized(ctx, firstPod, mdbsh.Namespace)
+	if err != nil {
+		return nil // Will retry
+	}
+
+	if initialized {
+		logger.Info("Config server replica set already initialized")
+		mdbsh.Status.ConfigServerInitialized = true
+		return r.Status().Update(ctx, mdbsh)
+	}
+
+	// Build config server replica set configuration
+	rsName := mdbsh.Name + "-cfg"
+	serviceName := mdbsh.Name + "-cfg-headless"
+	config := mongodb.BuildConfigServerReplicaSetConfig(
+		rsName,
+		mdbsh.Name+"-cfg",
+		serviceName,
+		mdbsh.Namespace,
+		int(mdbsh.Spec.ConfigServer.Members),
+		27019, // Config servers use port 27019
+	)
+
+	// Initialize
+	if err := rsManager.Initiate(ctx, firstPod, mdbsh.Namespace, config); err != nil {
+		return fmt.Errorf("failed to initiate config server replica set: %w", err)
+	}
+
+	logger.Info("Config server replica set initialized successfully")
+	mdbsh.Status.ConfigServerInitialized = true
+	return r.Status().Update(ctx, mdbsh)
+}
+
+func (r *MongoDBShardedReconciler) reconcileShardsInit(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) error {
+	logger := log.FromContext(ctx)
+
+	// Initialize the ShardsInitialized slice if needed
+	if len(mdbsh.Status.ShardsInitialized) != int(mdbsh.Spec.Shards.Count) {
+		mdbsh.Status.ShardsInitialized = make([]bool, mdbsh.Spec.Shards.Count)
+	}
+
+	// Shards use port 27018
+	rsManager, err := mongodb.NewReplicaSetManagerWithPort(27018)
+	if err != nil {
+		return fmt.Errorf("failed to create replica set manager: %w", err)
+	}
+
+	for i := int32(0); i < mdbsh.Spec.Shards.Count; i++ {
+		if mdbsh.Status.ShardsInitialized[i] {
+			continue
+		}
+
+		shardName := fmt.Sprintf("%s-shard-%d", mdbsh.Name, i)
+		firstPod := fmt.Sprintf("%s-0", shardName)
+		serviceName := shardName + "-headless"
+
+		logger.Info("Initializing shard replica set", "shard", shardName)
+
+		// Check if already initialized
+		initialized, err := rsManager.IsInitialized(ctx, firstPod, mdbsh.Namespace)
+		if err != nil {
+			continue // Will retry
+		}
+
+		if initialized {
+			logger.Info("Shard replica set already initialized", "shard", shardName)
+			mdbsh.Status.ShardsInitialized[i] = true
+			continue
+		}
+
+		// Build shard replica set configuration
+		config := mongodb.BuildShardReplicaSetConfig(
+			shardName,
+			shardName,
+			serviceName,
+			mdbsh.Namespace,
+			int(mdbsh.Spec.Shards.MembersPerShard),
+			27018, // Shards use port 27018
+		)
+
+		// Initialize
+		if err := rsManager.Initiate(ctx, firstPod, mdbsh.Namespace, config); err != nil {
+			logger.Error(err, "Failed to initiate shard replica set", "shard", shardName)
+			continue // Will retry
+		}
+
+		logger.Info("Shard replica set initialized successfully", "shard", shardName)
+		mdbsh.Status.ShardsInitialized[i] = true
+	}
+
+	return r.Status().Update(ctx, mdbsh)
+}
+
+func (r *MongoDBShardedReconciler) reconcileShardedAdminUser(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) error {
+	logger := log.FromContext(ctx)
+	logger.Info("Creating admin user via mongos")
+
+	// Get admin password from secret
+	adminPassword, err := r.getAdminPassword(ctx, mdbsh)
+	if err != nil {
+		return fmt.Errorf("failed to get admin password: %w", err)
+	}
+
+	// Get mongos pod name
+	mongosPod, err := r.getMongosPodName(ctx, mdbsh)
+	if err != nil {
+		return fmt.Errorf("failed to get mongos pod: %w", err)
+	}
+
+	// Create auth manager
+	authManager, err := mongodb.NewAuthManager()
+	if err != nil {
+		return fmt.Errorf("failed to create auth manager: %w", err)
+	}
+
+	// Check if admin user already exists
+	// Mongos container name is "mongos", port is 27017
+	exists, _ := authManager.UserExistsInContainer(ctx, mongosPod, mdbsh.Namespace, "mongos", "admin", "admin", 27017)
+	if exists {
+		logger.Info("Admin user already exists")
+		mdbsh.Status.AdminUserCreated = true
+		return r.Status().Update(ctx, mdbsh)
+	}
+
+	// Create admin user via mongos (container "mongos", port 27017)
+	if err := authManager.CreateAdminUserInContainer(ctx, mongosPod, mdbsh.Namespace, "mongos", "admin", adminPassword, 27017); err != nil {
+		return fmt.Errorf("failed to create admin user: %w", err)
+	}
+
+	logger.Info("Admin user created successfully")
+	mdbsh.Status.AdminUserCreated = true
+	return r.Status().Update(ctx, mdbsh)
+}
+
+func (r *MongoDBShardedReconciler) reconcileAddShards(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) error {
+	logger := log.FromContext(ctx)
+
+	// Initialize the ShardsAdded slice if needed
+	if len(mdbsh.Status.ShardsAdded) != int(mdbsh.Spec.Shards.Count) {
+		mdbsh.Status.ShardsAdded = make([]bool, mdbsh.Spec.Shards.Count)
+	}
+
+	// All shards must be initialized first
+	for i := int32(0); i < mdbsh.Spec.Shards.Count; i++ {
+		if !mdbsh.Status.ShardsInitialized[i] {
+			return nil // Wait for all shards to be initialized
+		}
+	}
+
+	shardManager, err := mongodb.NewShardManager()
+	if err != nil {
+		return fmt.Errorf("failed to create shard manager: %w", err)
+	}
+
+	// Get admin password for authentication
+	adminPassword, err := r.getAdminPassword(ctx, mdbsh)
+	if err != nil {
+		return fmt.Errorf("failed to get admin password: %w", err)
+	}
+
+	// Get mongos pod name
+	mongosPod, err := r.getMongosPodName(ctx, mdbsh)
+	if err != nil {
+		return fmt.Errorf("failed to get mongos pod: %w", err)
+	}
+
+	for i := int32(0); i < mdbsh.Spec.Shards.Count; i++ {
+		if mdbsh.Status.ShardsAdded[i] {
+			continue
+		}
+
+		shardName := fmt.Sprintf("%s-shard-%d", mdbsh.Name, i)
+		serviceName := shardName + "-headless"
+
+		logger.Info("Adding shard to cluster", "shard", shardName)
+
+		// Build shard connection string (shards run on port 27018)
+		shardConnString := mongodb.BuildShardConnectionString(
+			shardName,
+			shardName,
+			serviceName,
+			mdbsh.Namespace,
+			int(mdbsh.Spec.Shards.MembersPerShard),
+			27018, // Shards use port 27018
+		)
+
+		// Add shard via mongos with authentication (container "mongos", port 27017)
+		if err := shardManager.AddShardWithAuthInContainer(ctx, mongosPod, mdbsh.Namespace, "mongos", "admin", adminPassword, shardConnString, 27017); err != nil {
+			logger.Error(err, "Failed to add shard", "shard", shardName)
+			continue // Will retry
+		}
+
+		logger.Info("Shard added successfully", "shard", shardName)
+		mdbsh.Status.ShardsAdded[i] = true
+	}
+
+	return r.Status().Update(ctx, mdbsh)
+}
+
+func (r *MongoDBShardedReconciler) getMongosPodName(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) (string, error) {
+	// List mongos pods
+	podList := &corev1.PodList{}
+	labels := map[string]string{
+		"app.kubernetes.io/instance":  mdbsh.Name,
+		"app.kubernetes.io/component": "mongos",
+	}
+
+	if err := r.List(ctx, podList, client.InNamespace(mdbsh.Namespace), client.MatchingLabels(labels)); err != nil {
+		return "", err
+	}
+
+	for _, pod := range podList.Items {
+		if pod.Status.Phase == corev1.PodRunning {
+			return pod.Name, nil
+		}
+	}
+
+	return "", fmt.Errorf("no running mongos pod found")
+}
+
+func (r *MongoDBShardedReconciler) getAdminPassword(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded) (string, error) {
+	secret := &corev1.Secret{}
+	secretName := mdbsh.Spec.Auth.AdminCredentialsSecretRef.Name
+	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: mdbsh.Namespace}, secret); err != nil {
+		return "", fmt.Errorf("failed to get admin credentials secret: %w", err)
+	}
+
+	password, ok := secret.Data["password"]
+	if !ok {
+		return "", fmt.Errorf("password key not found in secret %s", secretName)
+	}
+
+	return string(password), nil
 }
 
 func (r *MongoDBShardedReconciler) createOrUpdate(ctx context.Context, mdbsh *mongodbv1alpha1.MongoDBSharded, obj client.Object) error {

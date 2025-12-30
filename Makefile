@@ -43,8 +43,19 @@ vet: ## Run go vet against code.
 	go vet ./...
 
 .PHONY: test
-test: manifests generate fmt vet ## Run tests.
-	go test -race ./... -coverprofile cover.out
+test: manifests generate fmt vet envtest ## Run tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -race ./... -coverprofile cover.out
+
+.PHONY: test-unit
+test-unit: fmt vet ## Run unit tests only (no envtest required).
+	go test -race ./internal/resources/... ./internal/mongodb/... -coverprofile cover-unit.out
+
+.PHONY: test-integration
+test-integration: manifests generate fmt vet envtest ## Run integration tests.
+	KUBEBUILDER_ASSETS="$(shell $(ENVTEST) use $(ENVTEST_K8S_VERSION) --bin-dir $(LOCALBIN) -p path)" go test -race ./internal/controller/... -v -coverprofile cover-integration.out
+
+## Envtest K8s version
+ENVTEST_K8S_VERSION ?= 1.31.0
 
 ##@ Build
 
@@ -102,7 +113,7 @@ ENVTEST ?= $(LOCALBIN)/setup-envtest
 
 ## Tool Versions
 KUSTOMIZE_VERSION ?= v5.3.0
-CONTROLLER_TOOLS_VERSION ?= v0.16.1
+CONTROLLER_TOOLS_VERSION ?= v0.17.0
 ENVTEST_VERSION ?= release-0.19
 
 .PHONY: kustomize

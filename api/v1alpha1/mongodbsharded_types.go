@@ -196,6 +196,20 @@ type MongoDBShardedStatus struct {
 
 	// ObservedGeneration is the most recent generation observed
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// ConfigServerInitialized indicates if the config server replica set has been initialized
+	ConfigServerInitialized bool `json:"configServerInitialized,omitempty"`
+
+	// ShardsInitialized indicates which shards have been initialized (indexed by shard number)
+	// +optional
+	ShardsInitialized []bool `json:"shardsInitialized,omitempty"`
+
+	// ShardsAdded indicates which shards have been added to the cluster (indexed by shard number)
+	// +optional
+	ShardsAdded []bool `json:"shardsAdded,omitempty"`
+
+	// AdminUserCreated indicates if the admin user has been created
+	AdminUserCreated bool `json:"adminUserCreated,omitempty"`
 }
 
 // ComponentStatus represents the status of a cluster component

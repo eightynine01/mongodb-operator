@@ -35,7 +35,8 @@ type MongoDBVersion struct {
 // StorageSpec defines storage configuration
 type StorageSpec struct {
 	// StorageClassName is the name of the StorageClass
-	// +kubebuilder:default="ceph-block"
+	// If not specified, the default storage class will be used
+	// +optional
 	StorageClassName string `json:"storageClassName,omitempty"`
 
 	// Size is the storage size

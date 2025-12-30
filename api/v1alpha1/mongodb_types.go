@@ -121,6 +121,12 @@ type MongoDBStatus struct {
 
 	// ObservedGeneration is the most recent generation observed
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// ReplicaSetInitialized indicates if the replica set has been initialized
+	ReplicaSetInitialized bool `json:"replicaSetInitialized,omitempty"`
+
+	// AdminUserCreated indicates if the admin user has been created
+	AdminUserCreated bool `json:"adminUserCreated,omitempty"`
 }
 
 // MemberStatus represents the status of a replica set member

@@ -32,10 +32,10 @@ import (
 )
 
 const (
-	mongoDBPort    = 27017
-	metricsPort    = 9216
-	defaultImage   = "mongo:8.2"
-	exporterImage  = "percona/mongodb_exporter:0.40"
+	mongoDBPort   = 27017
+	metricsPort   = 9216
+	defaultImage  = "mongo:8.2"
+	exporterImage = "percona/mongodb_exporter:0.40"
 )
 
 // Helper functions
@@ -195,12 +195,18 @@ func BuildReplicaSetStatefulSet(mdb *mongodbv1alpha1.MongoDB) *appsv1.StatefulSe
 	// Volumes
 	volumes := []corev1.Volume{
 		{
-			Name: "keyfile",
+			Name: "keyfile-secret",
 			VolumeSource: corev1.VolumeSource{
 				Secret: &corev1.SecretVolumeSource{
 					SecretName:  mdb.Name + "-keyfile",
 					DefaultMode: int32Ptr(0400),
 				},
+			},
+		},
+		{
+			Name: "keyfile",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
 		},
 		{
@@ -220,6 +226,29 @@ func BuildReplicaSetStatefulSet(mdb *mongodbv1alpha1.MongoDB) *appsv1.StatefulSe
 		{Name: "data", MountPath: mdb.Spec.Storage.DataDirPath},
 		{Name: "keyfile", MountPath: "/etc/mongodb-keyfile", ReadOnly: true},
 		{Name: "scripts", MountPath: "/scripts", ReadOnly: true},
+	}
+
+	// Init container to copy keyfile with correct permissions
+	// Runs as mongodb user (999) and uses FSGroup for proper file ownership
+	initContainers := []corev1.Container{
+		{
+			Name:  "copy-keyfile",
+			Image: "busybox:1.36",
+			Command: []string{
+				"sh", "-c",
+				"cp /keyfile-secret/keyfile /keyfile/keyfile && chmod 400 /keyfile/keyfile",
+			},
+			VolumeMounts: []corev1.VolumeMount{
+				{Name: "keyfile-secret", MountPath: "/keyfile-secret", ReadOnly: true},
+				{Name: "keyfile", MountPath: "/keyfile"},
+			},
+			SecurityContext: &corev1.SecurityContext{
+				RunAsUser:                int64Ptr(999),
+				RunAsGroup:               int64Ptr(999),
+				RunAsNonRoot:             boolPtr(true),
+				AllowPrivilegeEscalation: boolPtr(false),
+			},
+		},
 	}
 
 	// MongoDB container
@@ -308,10 +337,10 @@ func BuildReplicaSetStatefulSet(mdb *mongodbv1alpha1.MongoDB) *appsv1.StatefulSe
 		securityContext = mdb.Spec.Pod.SecurityContext
 	}
 
-	// Storage class
-	storageClassName := mdb.Spec.Storage.StorageClassName
-	if storageClassName == "" {
-		storageClassName = "ceph-block"
+	// Storage class - use nil for cluster default if not specified
+	var storageClassName *string
+	if mdb.Spec.Storage.StorageClassName != "" {
+		storageClassName = &mdb.Spec.Storage.StorageClassName
 	}
 
 	// Storage size
@@ -346,6 +375,7 @@ func BuildReplicaSetStatefulSet(mdb *mongodbv1alpha1.MongoDB) *appsv1.StatefulSe
 				},
 				Spec: corev1.PodSpec{
 					SecurityContext: securityContext,
+					InitContainers:  initContainers,
 					Containers:      containers,
 					Volumes:         volumes,
 					Affinity:        buildDefaultAffinity(mdb.Name),
@@ -358,7 +388,7 @@ func BuildReplicaSetStatefulSet(mdb *mongodbv1alpha1.MongoDB) *appsv1.StatefulSe
 					},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-						StorageClassName: &storageClassName,
+						StorageClassName: storageClassName,
 						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceStorage: storageSize,
@@ -423,9 +453,10 @@ func BuildConfigServerStatefulSet(mdbsh *mongodbv1alpha1.MongoDBSharded) *appsv1
 		"--keyFile", "/etc/mongodb-keyfile/keyfile",
 	}
 
-	storageClassName := mdbsh.Spec.ConfigServer.Storage.StorageClassName
-	if storageClassName == "" {
-		storageClassName = "ceph-block"
+	// Storage class - use nil for cluster default if not specified
+	var storageClassName *string
+	if mdbsh.Spec.ConfigServer.Storage.StorageClassName != "" {
+		storageClassName = &mdbsh.Spec.ConfigServer.Storage.StorageClassName
 	}
 
 	storageSize := mdbsh.Spec.ConfigServer.Storage.Size
@@ -452,6 +483,26 @@ func BuildConfigServerStatefulSet(mdbsh *mongodbv1alpha1.MongoDBSharded) *appsv1
 				},
 				Spec: corev1.PodSpec{
 					SecurityContext: buildDefaultSecurityContext(),
+					InitContainers: []corev1.Container{
+						{
+							Name:  "copy-keyfile",
+							Image: "busybox:1.36",
+							Command: []string{
+								"sh", "-c",
+								"cp /keyfile-secret/keyfile /keyfile/keyfile && chmod 400 /keyfile/keyfile",
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{Name: "keyfile-secret", MountPath: "/keyfile-secret", ReadOnly: true},
+								{Name: "keyfile", MountPath: "/keyfile"},
+							},
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser:                int64Ptr(999),
+								RunAsGroup:               int64Ptr(999),
+								RunAsNonRoot:             boolPtr(true),
+								AllowPrivilegeEscalation: boolPtr(false),
+							},
+						},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:  "mongodb",
@@ -470,12 +521,18 @@ func BuildConfigServerStatefulSet(mdbsh *mongodbv1alpha1.MongoDBSharded) *appsv1
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: "keyfile",
+							Name: "keyfile-secret",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
 									SecretName:  mdbsh.Name + "-keyfile",
 									DefaultMode: int32Ptr(0400),
 								},
+							},
+						},
+						{
+							Name: "keyfile",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
 						},
 					},
@@ -487,7 +544,7 @@ func BuildConfigServerStatefulSet(mdbsh *mongodbv1alpha1.MongoDBSharded) *appsv1
 					ObjectMeta: metav1.ObjectMeta{Name: "data"},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-						StorageClassName: &storageClassName,
+						StorageClassName: storageClassName,
 						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{corev1.ResourceStorage: storageSize},
 						},
@@ -533,9 +590,10 @@ func BuildShardStatefulSet(mdbsh *mongodbv1alpha1.MongoDBSharded, shardIndex int
 		"--keyFile", "/etc/mongodb-keyfile/keyfile",
 	}
 
-	storageClassName := mdbsh.Spec.Shards.Storage.StorageClassName
-	if storageClassName == "" {
-		storageClassName = "ceph-block"
+	// Storage class - use nil for cluster default if not specified
+	var storageClassName *string
+	if mdbsh.Spec.Shards.Storage.StorageClassName != "" {
+		storageClassName = &mdbsh.Spec.Shards.Storage.StorageClassName
 	}
 
 	storageSize := mdbsh.Spec.Shards.Storage.Size
@@ -562,6 +620,26 @@ func BuildShardStatefulSet(mdbsh *mongodbv1alpha1.MongoDBSharded, shardIndex int
 				},
 				Spec: corev1.PodSpec{
 					SecurityContext: buildDefaultSecurityContext(),
+					InitContainers: []corev1.Container{
+						{
+							Name:  "copy-keyfile",
+							Image: "busybox:1.36",
+							Command: []string{
+								"sh", "-c",
+								"cp /keyfile-secret/keyfile /keyfile/keyfile && chmod 400 /keyfile/keyfile",
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{Name: "keyfile-secret", MountPath: "/keyfile-secret", ReadOnly: true},
+								{Name: "keyfile", MountPath: "/keyfile"},
+							},
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser:                int64Ptr(999),
+								RunAsGroup:               int64Ptr(999),
+								RunAsNonRoot:             boolPtr(true),
+								AllowPrivilegeEscalation: boolPtr(false),
+							},
+						},
+					},
 					Containers: []corev1.Container{
 						{
 							Name:  "mongodb",
@@ -580,12 +658,18 @@ func BuildShardStatefulSet(mdbsh *mongodbv1alpha1.MongoDBSharded, shardIndex int
 					},
 					Volumes: []corev1.Volume{
 						{
-							Name: "keyfile",
+							Name: "keyfile-secret",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
 									SecretName:  mdbsh.Name + "-keyfile",
 									DefaultMode: int32Ptr(0400),
 								},
+							},
+						},
+						{
+							Name: "keyfile",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
 						},
 					},
@@ -597,7 +681,7 @@ func BuildShardStatefulSet(mdbsh *mongodbv1alpha1.MongoDBSharded, shardIndex int
 					ObjectMeta: metav1.ObjectMeta{Name: "data"},
 					Spec: corev1.PersistentVolumeClaimSpec{
 						AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteOnce},
-						StorageClassName: &storageClassName,
+						StorageClassName: storageClassName,
 						Resources: corev1.VolumeResourceRequirements{
 							Requests: corev1.ResourceList{corev1.ResourceStorage: storageSize},
 						},
@@ -611,13 +695,14 @@ func BuildShardStatefulSet(mdbsh *mongodbv1alpha1.MongoDBSharded, shardIndex int
 // BuildMongosConfigMap creates a ConfigMap for Mongos configuration
 func BuildMongosConfigMap(mdbsh *mongodbv1alpha1.MongoDBSharded) *corev1.ConfigMap {
 	// Build config server connection string
+	// Config servers use port 27019
 	var configHosts string
 	for i := int32(0); i < mdbsh.Spec.ConfigServer.Members; i++ {
 		if i > 0 {
 			configHosts += ","
 		}
-		configHosts += fmt.Sprintf("%s-cfg-%d.%s-cfg-headless.%s.svc.cluster.local:%d",
-			mdbsh.Name, i, mdbsh.Name, mdbsh.Namespace, mongoDBPort)
+		configHosts += fmt.Sprintf("%s-cfg-%d.%s-cfg-headless.%s.svc.cluster.local:27019",
+			mdbsh.Name, i, mdbsh.Name, mdbsh.Namespace)
 	}
 
 	return &corev1.ConfigMap{
@@ -674,13 +759,14 @@ func BuildMongosDeployment(mdbsh *mongodbv1alpha1.MongoDBSharded) *appsv1.Deploy
 	labels := buildLabels(mdbsh.Name, "mongos")
 
 	// Build config server connection string
+	// Config servers use port 27019
 	var configHosts string
 	for i := int32(0); i < mdbsh.Spec.ConfigServer.Members; i++ {
 		if i > 0 {
 			configHosts += ","
 		}
-		configHosts += fmt.Sprintf("%s-cfg-%d.%s-cfg-headless.%s.svc.cluster.local:%d",
-			mdbsh.Name, i, mdbsh.Name, mdbsh.Namespace, mongoDBPort)
+		configHosts += fmt.Sprintf("%s-cfg-%d.%s-cfg-headless.%s.svc.cluster.local:27019",
+			mdbsh.Name, i, mdbsh.Name, mdbsh.Namespace)
 	}
 
 	args := []string{
@@ -718,8 +804,9 @@ func BuildMongosDeployment(mdbsh *mongodbv1alpha1.MongoDBSharded) *appsv1.Deploy
 						Command: []string{"mongosh", "--quiet", "--eval", "db.adminCommand('ping')"},
 					},
 				},
-				InitialDelaySeconds: 5,
+				InitialDelaySeconds: 10,
 				PeriodSeconds:       10,
+				TimeoutSeconds:      5,
 			},
 		},
 	}
@@ -769,15 +856,41 @@ func BuildMongosDeployment(mdbsh *mongodbv1alpha1.MongoDBSharded) *appsv1.Deploy
 				},
 				Spec: corev1.PodSpec{
 					SecurityContext: buildDefaultSecurityContext(),
-					Containers:      containers,
+					InitContainers: []corev1.Container{
+						{
+							Name:  "copy-keyfile",
+							Image: "busybox:1.36",
+							Command: []string{
+								"sh", "-c",
+								"cp /keyfile-secret/keyfile /keyfile/keyfile && chmod 400 /keyfile/keyfile",
+							},
+							VolumeMounts: []corev1.VolumeMount{
+								{Name: "keyfile-secret", MountPath: "/keyfile-secret", ReadOnly: true},
+								{Name: "keyfile", MountPath: "/keyfile"},
+							},
+							SecurityContext: &corev1.SecurityContext{
+								RunAsUser:                int64Ptr(999),
+								RunAsGroup:               int64Ptr(999),
+								RunAsNonRoot:             boolPtr(true),
+								AllowPrivilegeEscalation: boolPtr(false),
+							},
+						},
+					},
+					Containers: containers,
 					Volumes: []corev1.Volume{
 						{
-							Name: "keyfile",
+							Name: "keyfile-secret",
 							VolumeSource: corev1.VolumeSource{
 								Secret: &corev1.SecretVolumeSource{
 									SecretName:  mdbsh.Name + "-keyfile",
 									DefaultMode: int32Ptr(0400),
 								},
+							},
+						},
+						{
+							Name: "keyfile",
+							VolumeSource: corev1.VolumeSource{
+								EmptyDir: &corev1.EmptyDirVolumeSource{},
 							},
 						},
 					},

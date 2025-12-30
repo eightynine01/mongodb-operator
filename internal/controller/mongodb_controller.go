@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	mongodbv1alpha1 "github.com/keiailab/mongodb-operator/api/v1alpha1"
+	"github.com/keiailab/mongodb-operator/internal/mongodb"
 	"github.com/keiailab/mongodb-operator/internal/resources"
 )
 
@@ -122,7 +123,42 @@ func (r *MongoDBReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return r.updateStatusError(ctx, mdb, "StatefulSet", err)
 	}
 
-	// 6. Update status
+	// 6. Wait for all pods to be ready
+	allReady, err := r.areAllPodsReady(ctx, mdb)
+	if err != nil {
+		return r.updateStatusError(ctx, mdb, "PodReadiness", err)
+	}
+	if !allReady {
+		logger.Info("Waiting for all pods to be ready")
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// 7. Initialize replica set if not initialized
+	if !mdb.Status.ReplicaSetInitialized {
+		if err := r.reconcileReplicaSetInitialization(ctx, mdb); err != nil {
+			return r.updateStatusError(ctx, mdb, "ReplicaSetInit", err)
+		}
+	}
+
+	// 8. Wait for primary election
+	hasPrimary, err := r.hasPrimary(ctx, mdb)
+	if err != nil {
+		logger.Info("Waiting for primary election", "error", err)
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+	if !hasPrimary {
+		logger.Info("Waiting for primary election")
+		return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
+	}
+
+	// 9. Create admin user if not created
+	if !mdb.Status.AdminUserCreated {
+		if err := r.reconcileAdminUser(ctx, mdb); err != nil {
+			return r.updateStatusError(ctx, mdb, "AdminUser", err)
+		}
+	}
+
+	// 10. Update status
 	if err := r.updateStatus(ctx, mdb); err != nil {
 		return ctrl.Result{}, err
 	}
@@ -149,8 +185,25 @@ func (r *MongoDBReconciler) handleDeletion(ctx context.Context, mdb *mongodbv1al
 }
 
 func (r *MongoDBReconciler) reconcileKeyfileSecret(ctx context.Context, mdb *mongodbv1alpha1.MongoDB) error {
+	// Check if keyfile secret already exists - DO NOT regenerate if it exists
+	// Keyfile must remain constant across all pods for replica set authentication
+	existingSecret := &corev1.Secret{}
+	secretName := mdb.Name + "-keyfile"
+	err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: mdb.Namespace}, existingSecret)
+	if err == nil {
+		// Secret exists, do not update
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Secret doesn't exist, create it
 	secret := resources.BuildKeyfileSecret(mdb)
-	return r.createOrUpdate(ctx, mdb, secret)
+	if err := controllerutil.SetControllerReference(mdb, secret, r.Scheme); err != nil {
+		return err
+	}
+	return r.Create(ctx, secret)
 }
 
 func (r *MongoDBReconciler) reconcileConfigMap(ctx context.Context, mdb *mongodbv1alpha1.MongoDB) error {
@@ -171,6 +224,131 @@ func (r *MongoDBReconciler) reconcileClientService(ctx context.Context, mdb *mon
 func (r *MongoDBReconciler) reconcileStatefulSet(ctx context.Context, mdb *mongodbv1alpha1.MongoDB) error {
 	sts := resources.BuildReplicaSetStatefulSet(mdb)
 	return r.createOrUpdate(ctx, mdb, sts)
+}
+
+func (r *MongoDBReconciler) areAllPodsReady(ctx context.Context, mdb *mongodbv1alpha1.MongoDB) (bool, error) {
+	sts := &appsv1.StatefulSet{}
+	if err := r.Get(ctx, types.NamespacedName{Name: mdb.Name, Namespace: mdb.Namespace}, sts); err != nil {
+		return false, err
+	}
+
+	return sts.Status.ReadyReplicas == mdb.Spec.Members, nil
+}
+
+func (r *MongoDBReconciler) reconcileReplicaSetInitialization(ctx context.Context, mdb *mongodbv1alpha1.MongoDB) error {
+	logger := log.FromContext(ctx)
+	logger.Info("Initializing replica set")
+
+	// Create replica set manager
+	rsManager, err := mongodb.NewReplicaSetManager()
+	if err != nil {
+		return fmt.Errorf("failed to create replica set manager: %w", err)
+	}
+
+	// Check if already initialized by querying first pod
+	firstPod := fmt.Sprintf("%s-0", mdb.Name)
+	initialized, err := rsManager.IsInitialized(ctx, firstPod, mdb.Namespace)
+	if err != nil {
+		logger.Info("Failed to check initialization status, will retry", "error", err)
+		return nil // Will retry on next reconcile
+	}
+
+	if initialized {
+		logger.Info("Replica set already initialized")
+		mdb.Status.ReplicaSetInitialized = true
+		return r.Status().Update(ctx, mdb)
+	}
+
+	// Build replica set configuration
+	serviceName := mdb.Name + "-headless"
+	config := mongodb.BuildReplicaSetConfig(
+		mdb.Spec.ReplicaSetName,
+		mdb.Name,
+		serviceName,
+		mdb.Namespace,
+		int(mdb.Spec.Members),
+		27017,
+	)
+
+	// Initialize replica set
+	if err := rsManager.Initiate(ctx, firstPod, mdb.Namespace, config); err != nil {
+		return fmt.Errorf("failed to initiate replica set: %w", err)
+	}
+
+	logger.Info("Replica set initialized successfully")
+	mdb.Status.ReplicaSetInitialized = true
+	return r.Status().Update(ctx, mdb)
+}
+
+func (r *MongoDBReconciler) hasPrimary(ctx context.Context, mdb *mongodbv1alpha1.MongoDB) (bool, error) {
+	rsManager, err := mongodb.NewReplicaSetManager()
+	if err != nil {
+		return false, err
+	}
+
+	firstPod := fmt.Sprintf("%s-0", mdb.Name)
+	return rsManager.HasPrimary(ctx, firstPod, mdb.Namespace)
+}
+
+func (r *MongoDBReconciler) reconcileAdminUser(ctx context.Context, mdb *mongodbv1alpha1.MongoDB) error {
+	logger := log.FromContext(ctx)
+	logger.Info("Creating admin user")
+
+	// Get admin credentials from secret
+	adminPassword, err := r.getAdminPassword(ctx, mdb)
+	if err != nil {
+		return fmt.Errorf("failed to get admin password: %w", err)
+	}
+
+	// Find the primary pod
+	rsManager, err := mongodb.NewReplicaSetManager()
+	if err != nil {
+		return fmt.Errorf("failed to create replica set manager: %w", err)
+	}
+
+	firstPod := fmt.Sprintf("%s-0", mdb.Name)
+	primaryPod, err := rsManager.GetPrimaryPod(ctx, firstPod, mdb.Namespace)
+	if err != nil {
+		return fmt.Errorf("failed to get primary pod: %w", err)
+	}
+
+	// Create auth manager
+	authManager, err := mongodb.NewAuthManager()
+	if err != nil {
+		return fmt.Errorf("failed to create auth manager: %w", err)
+	}
+
+	// Check if admin user already exists
+	exists, _ := authManager.UserExists(ctx, primaryPod, mdb.Namespace, "admin", "admin")
+	if exists {
+		logger.Info("Admin user already exists")
+		mdb.Status.AdminUserCreated = true
+		return r.Status().Update(ctx, mdb)
+	}
+
+	// Create admin user using localhost exception
+	if err := authManager.CreateAdminUser(ctx, primaryPod, mdb.Namespace, "admin", adminPassword); err != nil {
+		return fmt.Errorf("failed to create admin user: %w", err)
+	}
+
+	logger.Info("Admin user created successfully")
+	mdb.Status.AdminUserCreated = true
+	return r.Status().Update(ctx, mdb)
+}
+
+func (r *MongoDBReconciler) getAdminPassword(ctx context.Context, mdb *mongodbv1alpha1.MongoDB) (string, error) {
+	secret := &corev1.Secret{}
+	secretName := mdb.Spec.Auth.AdminCredentialsSecretRef.Name
+	if err := r.Get(ctx, types.NamespacedName{Name: secretName, Namespace: mdb.Namespace}, secret); err != nil {
+		return "", fmt.Errorf("failed to get admin credentials secret: %w", err)
+	}
+
+	password, ok := secret.Data["password"]
+	if !ok {
+		return "", fmt.Errorf("password key not found in secret %s", secretName)
+	}
+
+	return string(password), nil
 }
 
 func (r *MongoDBReconciler) createOrUpdate(ctx context.Context, mdb *mongodbv1alpha1.MongoDB, obj client.Object) error {
@@ -208,11 +386,22 @@ func (r *MongoDBReconciler) updateStatus(ctx context.Context, mdb *mongodbv1alph
 		mdb.Status.ReadyMembers = sts.Status.ReadyReplicas
 	}
 
-	// Update phase based on ready members
-	if mdb.Status.ReadyMembers == mdb.Spec.Members {
+	// Update phase based on ready members and initialization status
+	if mdb.Status.ReadyMembers == mdb.Spec.Members && mdb.Status.ReplicaSetInitialized && mdb.Status.AdminUserCreated {
 		mdb.Status.Phase = "Running"
 	} else if mdb.Status.ReadyMembers > 0 {
 		mdb.Status.Phase = "Initializing"
+	}
+
+	// Get current primary if replica set is initialized
+	if mdb.Status.ReplicaSetInitialized {
+		rsManager, err := mongodb.NewReplicaSetManager()
+		if err == nil {
+			firstPod := fmt.Sprintf("%s-0", mdb.Name)
+			if primaryPod, err := rsManager.GetPrimaryPod(ctx, firstPod, mdb.Namespace); err == nil {
+				mdb.Status.CurrentPrimary = primaryPod
+			}
+		}
 	}
 
 	// Set connection string
@@ -236,18 +425,57 @@ func (r *MongoDBReconciler) buildConditions(mdb *mongodbv1alpha1.MongoDB) []meta
 	readyReason := "NotReady"
 	readyMessage := fmt.Sprintf("%d/%d members ready", mdb.Status.ReadyMembers, mdb.Spec.Members)
 
-	if mdb.Status.ReadyMembers == mdb.Spec.Members {
+	if mdb.Status.ReadyMembers == mdb.Spec.Members && mdb.Status.ReplicaSetInitialized && mdb.Status.AdminUserCreated {
 		readyStatus = metav1.ConditionTrue
 		readyReason = "Ready"
-		readyMessage = "All members are ready"
+		readyMessage = "All members are ready and cluster is fully initialized"
 	}
 
 	conditions = append(conditions, metav1.Condition{
 		Type:               "Ready",
 		Status:             readyStatus,
+		ObservedGeneration: mdb.Generation,
 		LastTransitionTime: metav1.Now(),
 		Reason:             readyReason,
 		Message:            readyMessage,
+	})
+
+	// ReplicaSetInitialized condition
+	rsInitStatus := metav1.ConditionFalse
+	rsInitReason := "NotInitialized"
+	rsInitMessage := "Replica set has not been initialized"
+	if mdb.Status.ReplicaSetInitialized {
+		rsInitStatus = metav1.ConditionTrue
+		rsInitReason = "Initialized"
+		rsInitMessage = "Replica set has been initialized"
+	}
+
+	conditions = append(conditions, metav1.Condition{
+		Type:               "ReplicaSetInitialized",
+		Status:             rsInitStatus,
+		ObservedGeneration: mdb.Generation,
+		LastTransitionTime: metav1.Now(),
+		Reason:             rsInitReason,
+		Message:            rsInitMessage,
+	})
+
+	// AuthenticationReady condition
+	authStatus := metav1.ConditionFalse
+	authReason := "NotConfigured"
+	authMessage := "Admin user has not been created"
+	if mdb.Status.AdminUserCreated {
+		authStatus = metav1.ConditionTrue
+		authReason = "Configured"
+		authMessage = "Admin user has been created"
+	}
+
+	conditions = append(conditions, metav1.Condition{
+		Type:               "AuthenticationReady",
+		Status:             authStatus,
+		ObservedGeneration: mdb.Generation,
+		LastTransitionTime: metav1.Now(),
+		Reason:             authReason,
+		Message:            authMessage,
 	})
 
 	return conditions
