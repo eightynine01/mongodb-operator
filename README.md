@@ -253,7 +253,7 @@ status:
 
 ### Vertical Scaling (Resource Adjustment)
 
-Update resource requests/limits:
+Update resource requests/limits (triggers rolling restart):
 
 ```bash
 kubectl patch mongodbsharded my-cluster --type='merge' -p '{
@@ -267,6 +267,70 @@ kubectl patch mongodbsharded my-cluster --type='merge' -p '{
   }
 }'
 ```
+
+### Mongos Replica Scaling
+
+Scale mongos routers up or down:
+
+```bash
+# Scale up
+kubectl patch mongodbsharded my-cluster --type='merge' \
+  -p '{"spec":{"mongos":{"replicas":3}}}'
+
+# Scale down
+kubectl patch mongodbsharded my-cluster --type='merge' \
+  -p '{"spec":{"mongos":{"replicas":1}}}'
+```
+
+## Resource Recommendations
+
+### Minimum Requirements
+
+| Component | Memory | CPU | Notes |
+|-----------|--------|-----|-------|
+| Config Server | 256Mi | 100m | 3 members required |
+| Shard Member | 512Mi | 250m | Per replica |
+| Mongos | 512Mi | 250m | 256Mi causes OOM |
+
+### Production Recommendations
+
+| Component | Memory | CPU | Storage |
+|-----------|--------|-----|---------|
+| Config Server | 1Gi | 500m | 10Gi SSD |
+| Shard Member | 4Gi | 2 | 100Gi+ SSD |
+| Mongos | 1Gi | 500m | - |
+
+## Tested Features
+
+The following features have been verified through stability testing:
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| ReplicaSet auto-initialization | ✅ Stable | `rs.initiate()` automatic |
+| Sharded cluster initialization | ✅ Stable | Config server, shards, mongos |
+| Admin user creation | ✅ Stable | Localhost exception |
+| Shard scale out (2→5) | ✅ Stable | Automatic `sh.addShard()` |
+| Mongos replica scaling | ✅ Stable | Up and down |
+| Resource updates | ✅ Stable | Rolling restart |
+| Data integrity during scaling | ✅ Verified | No data loss |
+| Concurrent writes during scale | ✅ Stable | Tested with stress load |
+
+## Limitations
+
+### Not Yet Supported
+
+| Feature | Status | Workaround |
+|---------|--------|------------|
+| Shard scale-in | ❌ Not implemented | Manual `removeShard` required |
+| ReplicaSet member removal | ❌ Not implemented | Manual `rs.remove()` required |
+| Automatic backup scheduling | ❌ Planned | Use external CronJob |
+| Cross-cluster replication | ❌ Planned | - |
+
+### Known Issues
+
+1. **Mongos Memory**: Minimum 512Mi recommended. 256Mi causes OOM under load.
+2. **Scale-in orphans resources**: Decreasing shard count leaves StatefulSets orphaned.
+3. **No graceful member removal**: Scaling down ReplicaSet members doesn't call `rs.remove()`.
 
 ### MongoDBBackup
 
