@@ -32,6 +32,9 @@ build/
 # Helm packages (will be in gh-pages branch)
 *.tgz
 
+# Local gh-pages worktree
+.gh-pages/
+
 # Temporary files
 tmp/
 temp/
