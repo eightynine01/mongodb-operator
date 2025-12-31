@@ -29,14 +29,14 @@ A Kubernetes Operator for deploying and managing MongoDB ReplicaSets and Sharded
 ### Add the Helm Repository
 
 ```bash
-helm repo add keiailab https://keiailab.github.io/mongodb-operator
+helm repo add mongodb-operator https://eightynine01.github.io/mongodb-operator
 helm repo update
 ```
 
 ### Install the Chart
 
 ```bash
-helm install mongodb-operator keiailab/mongodb-operator \
+helm install mongodb-operator mongodb-operator/mongodb-operator \
   --namespace mongodb-operator-system \
   --create-namespace
 ```
@@ -44,7 +44,7 @@ helm install mongodb-operator keiailab/mongodb-operator \
 ### Install with Custom Values
 
 ```bash
-helm install mongodb-operator keiailab/mongodb-operator \
+helm install mongodb-operator mongodb-operator/mongodb-operator \
   --namespace mongodb-operator-system \
   --create-namespace \
   --set replicaCount=1 \
@@ -209,7 +209,7 @@ kubectl delete crd mongodbbackups.mongodb.keiailab.com
 
 ```bash
 helm repo update
-helm upgrade mongodb-operator keiailab/mongodb-operator \
+helm upgrade mongodb-operator mongodb-operator/mongodb-operator \
   --namespace mongodb-operator-system
 ```
 
