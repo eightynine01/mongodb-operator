@@ -145,24 +145,51 @@ func (r *MongoDBBackupReconciler) handleDeletion(ctx context.Context, backup *mo
 }
 
 func (r *MongoDBBackupReconciler) getClusterConnectionString(ctx context.Context, backup *mongodbv1alpha1.MongoDBBackup) (string, error) {
+	var host string
+	var authSecretName string
+
 	switch backup.Spec.ClusterRef.Kind {
 	case "MongoDB":
 		mdb := &mongodbv1alpha1.MongoDB{}
 		if err := r.Get(ctx, types.NamespacedName{Name: backup.Spec.ClusterRef.Name, Namespace: backup.Namespace}, mdb); err != nil {
 			return "", fmt.Errorf("failed to get MongoDB cluster: %w", err)
 		}
-		return mdb.Status.ConnectionString, nil
+		// Extract host from connection string (remove mongodb:// prefix)
+		host = mdb.Name + "." + backup.Namespace + ".svc.cluster.local:27017"
+		authSecretName = mdb.Spec.Auth.AdminCredentialsSecretRef.Name
 
 	case "MongoDBSharded":
 		mdbsh := &mongodbv1alpha1.MongoDBSharded{}
 		if err := r.Get(ctx, types.NamespacedName{Name: backup.Spec.ClusterRef.Name, Namespace: backup.Namespace}, mdbsh); err != nil {
 			return "", fmt.Errorf("failed to get MongoDBSharded cluster: %w", err)
 		}
-		return mdbsh.Status.ConnectionString, nil
+		host = mdbsh.Name + "-mongos." + backup.Namespace + ".svc.cluster.local:27017"
+		authSecretName = mdbsh.Spec.Auth.AdminCredentialsSecretRef.Name
 
 	default:
 		return "", fmt.Errorf("unknown cluster kind: %s", backup.Spec.ClusterRef.Kind)
 	}
+
+	// Get admin credentials from secret
+	secret := &corev1.Secret{}
+	if err := r.Get(ctx, types.NamespacedName{Name: authSecretName, Namespace: backup.Namespace}, secret); err != nil {
+		return "", fmt.Errorf("failed to get auth secret %s: %w", authSecretName, err)
+	}
+
+	username := string(secret.Data["username"])
+	password := string(secret.Data["password"])
+
+	if username == "" || password == "" {
+		return "", fmt.Errorf("auth secret %s missing username or password", authSecretName)
+	}
+
+	// Build connection string with authentication
+	// Note: Don't include database path (/admin) - only authSource parameter
+	// Otherwise mongodump will only backup the specified database
+	connectionString := fmt.Sprintf("mongodb://%s:%s@%s/?authSource=admin",
+		username, password, host)
+
+	return connectionString, nil
 }
 
 func (r *MongoDBBackupReconciler) createOrUpdate(ctx context.Context, backup *mongodbv1alpha1.MongoDBBackup, obj client.Object) error {
