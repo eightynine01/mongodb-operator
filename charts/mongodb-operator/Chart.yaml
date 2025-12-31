@@ -2,8 +2,8 @@ apiVersion: v2
 name: mongodb-operator
 description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded Clusters
 type: application
-version: 0.0.4
-appVersion: "0.0.3"
+version: 0.0.5
+appVersion: "0.0.5"
 kubeVersion: ">=1.26.0-0"
 
 keywords:
@@ -114,27 +114,17 @@ annotations:
   artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/images: |
     - name: mongodb-operator
-      image: keiailab/mongodb-operator:0.0.3
+      image: keiailab/mongodb-operator:0.0.5
     - name: mongodb
       image: mongo:8.2
     - name: mongodb-exporter
       image: percona/mongodb_exporter:0.40
   artifacthub.io/prerelease: "false"
   artifacthub.io/changes: |
-    - kind: added
-      description: Automatic ReplicaSet initialization (rs.initiate)
-    - kind: added
-      description: Automatic Sharded Cluster initialization with addShard
-    - kind: added
-      description: Admin user auto-creation via localhost exception
-    - kind: added
-      description: Horizontal shard scaling (scale out) support
-    - kind: added
-      description: Resource recommendations and operational documentation
     - kind: fixed
-      description: Preserve shard status arrays during scale out
+      description: Backup authentication - include credentials in connection string
     - kind: fixed
-      description: Port configuration for configsvr (27019) and shardsvr (27018)
+      description: Backup all databases - remove /admin path from URI for full backup
   artifacthub.io/recommendations: |
     - url: https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
     - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
