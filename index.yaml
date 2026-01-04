@@ -1,0 +1,133 @@
+apiVersion: v1
+entries:
+  mongodb-operator:
+  - annotations:
+      artifacthub.io/category: database
+      artifacthub.io/changes: |
+        - kind: fixed
+          description: Backup authentication - include credentials in connection string
+        - kind: fixed
+          description: Backup all databases - remove /admin path from URI for full backup
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/crds: |
+        - kind: MongoDB
+          version: v1alpha1
+          name: mongodbs.mongodb.keiailab.com
+          displayName: MongoDB ReplicaSet
+          description: Deploys and manages a MongoDB ReplicaSet cluster
+        - kind: MongoDBSharded
+          version: v1alpha1
+          name: mongodbshardeds.mongodb.keiailab.com
+          displayName: MongoDB Sharded Cluster
+          description: Deploys and manages a MongoDB Sharded cluster with config servers, shards, and mongos routers
+        - kind: MongoDBBackup
+          version: v1alpha1
+          name: mongodbbackups.mongodb.keiailab.com
+          displayName: MongoDB Backup
+          description: Creates and manages MongoDB backups to S3 or PVC storage
+      artifacthub.io/crdsExamples: |
+        - apiVersion: mongodb.keiailab.com/v1alpha1
+          kind: MongoDB
+          metadata:
+            name: my-mongodb
+            namespace: database
+          spec:
+            members: 3
+            version:
+              version: "8.2"
+            storage:
+              storageClassName: standard
+              size: 10Gi
+            auth:
+              mechanism: SCRAM-SHA-256
+              adminCredentialsSecretRef:
+                name: mongodb-admin
+            monitoring:
+              enabled: true
+        - apiVersion: mongodb.keiailab.com/v1alpha1
+          kind: MongoDBSharded
+          metadata:
+            name: my-sharded
+            namespace: database
+          spec:
+            version:
+              version: "8.2"
+            configServer:
+              members: 3
+              storage:
+                size: 5Gi
+            shards:
+              count: 2
+              membersPerShard: 3
+              storage:
+                size: 20Gi
+            mongos:
+              replicas: 2
+        - apiVersion: mongodb.keiailab.com/v1alpha1
+          kind: MongoDBBackup
+          metadata:
+            name: my-backup
+            namespace: database
+          spec:
+            clusterRef:
+              name: my-mongodb
+              kind: MongoDB
+            type: full
+            compression: true
+            storage:
+              type: s3
+              s3:
+                bucket: mongodb-backups
+                endpoint: https://s3.amazonaws.com
+                credentialsRef:
+                  name: s3-credentials
+      artifacthub.io/images: |
+        - name: mongodb-operator
+          image: keiailab/mongodb-operator:0.0.5
+        - name: mongodb
+          image: mongo:8.2
+        - name: mongodb-exporter
+          image: percona/mongodb_exporter:0.40
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Documentation
+          url: https://github.com/keiailab/mongodb-operator/blob/main/README.md
+        - name: Source Code
+          url: https://github.com/keiailab/mongodb-operator
+        - name: MongoDB Documentation
+          url: https://www.mongodb.com/docs/
+      artifacthub.io/operatorCapabilities: Full Lifecycle
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/recommendations: |
+        - url: https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
+        - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
+    apiVersion: v2
+    appVersion: 0.0.5
+    created: "2026-01-04T10:02:51.113955+09:00"
+    description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded
+      Clusters
+    digest: fc383b1472a1840ffa50a5ee03b281cc0a0caea3511a0fc265472e9168b99f0a
+    home: https://github.com/keiailab/mongodb-operator
+    icon: https://raw.githubusercontent.com/mongodb/mongo/master/docs/leaf.svg
+    keywords:
+    - mongodb
+    - database
+    - nosql
+    - operator
+    - replicaset
+    - sharded-cluster
+    - backup
+    - kubernetes
+    kubeVersion: '>=1.26.0-0'
+    maintainers:
+    - email: support@keiailab.com
+      name: Keiailab
+      url: https://keiailab.com
+    name: mongodb-operator
+    sources:
+    - https://github.com/keiailab/mongodb-operator
+    type: application
+    urls:
+    - https://eightynine01.github.io/mongodb-operator/mongodb-operator-0.0.5.tgz
+    version: 0.0.5
+generated: "2026-01-04T10:02:51.11319+09:00"

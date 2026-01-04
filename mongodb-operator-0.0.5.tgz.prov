@@ -1,44 +1,14 @@
-apiVersion: v2
-name: mongodb-operator
-description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded Clusters
-type: application
-version: 0.0.5
-appVersion: "0.0.5"
-kubeVersion: ">=1.26.0-0"
-
-keywords:
-  - mongodb
-  - database
-  - nosql
-  - operator
-  - replicaset
-  - sharded-cluster
-  - backup
-  - kubernetes
-
-home: https://github.com/keiailab/mongodb-operator
-
-sources:
-  - https://github.com/keiailab/mongodb-operator
-
-maintainers:
-  - name: Keiailab
-    email: support@keiailab.com
-    url: https://keiailab.com
-
-icon: https://raw.githubusercontent.com/mongodb/mongo/master/docs/leaf.svg
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
 
 annotations:
-  artifacthub.io/license: Apache-2.0
   artifacthub.io/category: database
-  artifacthub.io/operatorCapabilities: Full Lifecycle
-  artifacthub.io/links: |
-    - name: Documentation
-      url: https://github.com/keiailab/mongodb-operator/blob/main/README.md
-    - name: Source Code
-      url: https://github.com/keiailab/mongodb-operator
-    - name: MongoDB Documentation
-      url: https://www.mongodb.com/docs/
+  artifacthub.io/changes: |
+    - kind: fixed
+      description: Backup authentication - include credentials in connection string
+    - kind: fixed
+      description: Backup all databases - remove /admin path from URI for full backup
+  artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/crds: |
     - kind: MongoDB
       version: v1alpha1
@@ -111,7 +81,6 @@ annotations:
             endpoint: https://s3.amazonaws.com
             credentialsRef:
               name: s3-credentials
-  artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/images: |
     - name: mongodb-operator
       image: keiailab/mongodb-operator:0.0.5
@@ -119,14 +88,62 @@ annotations:
       image: mongo:8.2
     - name: mongodb-exporter
       image: percona/mongodb_exporter:0.40
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/keiailab/mongodb-operator/blob/main/README.md
+    - name: Source Code
+      url: https://github.com/keiailab/mongodb-operator
+    - name: MongoDB Documentation
+      url: https://www.mongodb.com/docs/
+  artifacthub.io/operatorCapabilities: Full Lifecycle
   artifacthub.io/prerelease: "false"
-  artifacthub.io/changes: |
-    - kind: fixed
-      description: Backup authentication - include credentials in connection string
-    - kind: fixed
-      description: Backup all databases - remove /admin path from URI for full backup
   artifacthub.io/recommendations: |
     - url: https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
     - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
+apiVersion: v2
+appVersion: 0.0.5
+description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded Clusters
+home: https://github.com/keiailab/mongodb-operator
+icon: https://raw.githubusercontent.com/mongodb/mongo/master/docs/leaf.svg
+keywords:
+- - mongodb
+- - database
+- - nosql
+- - operator
+- - replicaset
+- - sharded-cluster
+- - backup
+- - kubernetes
+kubeVersion: '>=1.26.0-0'
+maintainers:
+- - email: support@keiailab.com
+  name: Keiailab
+  url: https://keiailab.com
+name: mongodb-operator
+sources:
+- - https://github.com/keiailab/mongodb-operator
+type: application
+version: 0.0.5
 
-dependencies: []
+...
+files:
+  mongodb-operator-0.0.5.tgz: sha256:fc383b1472a1840ffa50a5ee03b281cc0a0caea3511a0fc265472e9168b99f0a
+
+-----BEGIN PGP SIGNATURE-----
+
+wsG5BAEBCgBtBYJpWbwpCRBlHlGvUgvLeEUUAAAAAAAcACBzYWx0QG5vdGF0aW9u
+cy5vcGVucGdwanMub3JnM8wXsyZ4YfgfXIFkzIBq4B2sOpiOMChrct0e9QyikFUW
+IQSJpAlHaCjLmSM4w3hlHlGvUgvLeAAAXTUQAI2OoG4Fy1H5dEJOZXHnX1PMIj0c
+G+Ib4gkYdjlsvQ4UDBpsF25OuHhkJb0GJXlKeVa6vwDVhydkywTeCylxY73HUOQu
+5Q2+WQz1UNVtrV+zZHVrXls2ZpLmy2SDgODKaaqToe5q2Y/q+eUs02qitQ9qrqEr
+oSSst/+W9L4tYQ9wuwA3znKZJCFFxC2H0r+NgpzBsBXMoylH4c7iLjlgYpUAG9LQ
+stkRMBZ8tCnjuF0kKsL8L2ltbfn0kW0Libr0B8khp6XieOt6J5nTOXmRLydbCk7L
+UEJimYzlQKr5vZeFeUOC8YAJUIBde9yYef1k2Qp6CErPBmnkIp9fOnqW/OjdhvTx
+QpRHBrNEke3sTXB/HSSHpj3yJFaOoTmqdsQ0XHon+Eg61tDsjg1DBnCWivTBvDcz
+jrmrLYoP54tTurqq8XDP5LV0hp/wrW19g8iKfvFqv4QJ4o7AHTnHLHEBZWIda5/J
+tNlkDzSLZ9kkPkS8XfqoF3f6LGRYeof9hiCSOd3wl+OstDpCz8FV90gS+r4dreba
+x+2tUjcsGKNcZJ88vx8p5raWL8KjQJVmD0zF38vJjrkg4zRBvOnA+l4C9vvWPZpB
+YHSi6zjaTEMXfOqA/Ef6l6iGTTzueSApzlUa4jzvAfS+xIUBsLGDkxSitbd1X9nr
++k1zCD8YY+t0AYVd
+-----END PGP SIGNATURE-----
