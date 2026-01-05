@@ -19,7 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 - Upgraded Go version to 1.25.0 to address multiple CVEs (CVE-2025-22871, CVE-2025-61723, etc.)
 - Upgraded `golang.org/x/oauth2` to v0.34.0 to fix CVE-2025-22868
-- Updated base builder image to `golang:1.24`
+- Updated base images to use immutable SHA256 digests for `golang:1.25` and `distroless/static:nonroot`
+- Enabled SBOM and Provenance attestations in container image builds
 - Updated all dependencies to latest secure versions
 
 ### Fixed

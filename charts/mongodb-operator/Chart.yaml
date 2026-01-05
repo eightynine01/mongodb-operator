@@ -121,10 +121,12 @@ annotations:
       image: percona/mongodb_exporter:0.40
   artifacthub.io/prerelease: "false"
   artifacthub.io/changes: |
+    - kind: security
+      description: Upgraded Go to 1.25.0 and dependencies to fix multiple CVEs
+    - kind: security
+      description: Using immutable digests for base images with SBOM/Provenance attestations
     - kind: fixed
-      description: Backup authentication - include credentials in connection string
-    - kind: fixed
-      description: Backup all databases - remove /admin path from URI for full backup
+      description: Added pods/exec permission to RBAC for ReplicaSet initialization
   artifacthub.io/recommendations: |
     - url: https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
     - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
