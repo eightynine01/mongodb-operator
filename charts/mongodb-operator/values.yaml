@@ -94,7 +94,7 @@ metrics:
   secure: true
   # -- Create ServiceMonitor for Prometheus Operator
   serviceMonitor:
-    enabled: false
+    enabled: true
     # -- ServiceMonitor scrape interval
     interval: 30s
     # -- Additional labels for ServiceMonitor
