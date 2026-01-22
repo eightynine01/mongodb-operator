@@ -115,7 +115,7 @@ kubectl get deployment -n mongodb-operator-system \
   mongodb-operator-controller-manager \
   -o jsonpath='{.spec.template.spec.containers[0].image}'
 
-# Expected: eightynine01/mongodb-operator:1.0.0
+# Expected: ghcr.io/eightynine01/mongodb-operator:1.0.0
 
 # Verify CRDs
 kubectl get crd | grep mongodb

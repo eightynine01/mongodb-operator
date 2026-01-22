@@ -7,7 +7,7 @@ replicaCount: 1
 # Operator image configuration
 image:
   # -- Image repository
-  repository: eightynine01/mongodb-operator
+  repository: ghcr.io/eightynine01/mongodb-operator
   # -- Image pull policy
   pullPolicy: IfNotPresent
   # -- Overrides the image tag (default: chart appVersion)

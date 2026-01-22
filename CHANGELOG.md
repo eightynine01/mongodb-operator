@@ -14,6 +14,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates
 - Shard scale-in support
 
+## [1.0.1] - 2026-01-22
+
+### Changed
+- **BREAKING**: Migrated container registry from Docker Hub to GitHub Container Registry (GHCR)
+  - New image path: `ghcr.io/eightynine01/mongodb-operator` (previously `eightynine01/mongodb-operator`)
+  - No Docker Hub Secrets required - uses GITHUB_TOKEN automatically
+  - Public images with no rate limits for authenticated users
+  - Better integration with GitHub Security scanning
+
+### Migration Guide
+Existing users need to update image references:
+```yaml
+# Old (Docker Hub)
+image: eightynine01/mongodb-operator:1.0.0
+
+# New (GHCR)
+image: ghcr.io/eightynine01/mongodb-operator:1.0.1
+```
+
+For Helm users, the repository is automatically updated. Just upgrade:
+```bash
+helm repo update
+helm upgrade mongodb-operator mongodb-operator/mongodb-operator --version 1.0.1
+```
+
+### Added
+- Documentation: GHCR setup and migration guide (`docs/releases/ghcr-setup.md`)
+- E2E testing framework with comprehensive test scripts (`test/e2e/`)
+- Extended roadmap with MongoDB Enterprise feature comparison (`ROADMAP.md`)
+
+### Fixed
+- GitHub Actions Docker build failures due to Docker Hub authentication
+- CI/CD pipeline now fully automated without external secrets
+
 ## [1.0.0] - 2026-01-21
 
 ### Summary

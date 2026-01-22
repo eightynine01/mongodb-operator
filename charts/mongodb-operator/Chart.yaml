@@ -2,8 +2,8 @@ apiVersion: v2
 name: mongodb-operator
 description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded Clusters (v1.0.0 GA Release)
 type: application
-version: 1.0.0
-appVersion: "1.0.0"
+version: 1.0.1
+appVersion: "1.0.1"
 kubeVersion: ">=1.26.0-0"
 
 keywords:
@@ -114,35 +114,23 @@ annotations:
   artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/images: |
     - name: mongodb-operator
-      image: eightynine01/mongodb-operator:1.0.0
+      image: ghcr.io/eightynine01/mongodb-operator:1.0.1
     - name: mongodb
       image: mongo:8.2
     - name: mongodb-exporter
       image: percona/mongodb_exporter:0.40
   artifacthub.io/prerelease: "false"
   artifacthub.io/changes: |
+    - kind: changed
+      description: "BREAKING: Migrated from Docker Hub to GitHub Container Registry (ghcr.io)"
     - kind: added
-      description: Initial stable (GA) release with comprehensive CI/CD and documentation
+      description: E2E testing framework with comprehensive test scripts
     - kind: added
-      description: GitHub repository templates (Issues, PR)
+      description: Extended roadmap with MongoDB Enterprise feature comparison
     - kind: added
-      description: GitHub Actions CI/CD (5 workflows)
-    - kind: added
-      description: Comprehensive documentation (9 docs)
-    - kind: added
-      description: Production-ready examples (7 examples)
-    - kind: added
-      description: Artifact Hub integration
-    - kind: added
-      description: Dependency automation (Dependabot)
-    - kind: added
-      description: Pre-commit hooks for code quality
-    - kind: added
-      description: Code coverage with Codecov
-    - kind: added
-      description: Helm repository publishing
-    - kind: added
-      description: Security scanning (dependencies, containers, licenses)
+      description: GHCR setup and migration documentation
+    - kind: fixed
+      description: GitHub Actions Docker build automation (no external secrets needed)
   artifacthub.io/recommendations: |
     - url: https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
     - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager

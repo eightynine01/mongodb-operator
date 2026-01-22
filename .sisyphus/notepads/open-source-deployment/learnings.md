@@ -34,7 +34,7 @@
 - `make docker-push IMG=...` - Push Docker image
 
 ### Docker Image
-- Default: `eightynine01/mongodb-operator:latest`
+- Default: `ghcr.io/eightynine01/mongodb-operator:latest`
 - Base: `gcr.io/distroless/static:nonroot`
 - Multi-arch ready (ARG TARGETOS, TARGETARCH)
 
@@ -513,7 +513,7 @@
 - Breaking changes section explicitly states "None" for GA release - important for user confidence
 - Chart.yaml version and appVersion must be synchronized (both 1.0.0) to avoid version mismatch errors
 - Artifact Hub annotations updated in Chart.yaml with new release changes (kind: added for all features)
-- Docker image reference in artifacthub.io/images must match release version (eightynine01/mongodb-operator:1.0.0)
+- Docker image reference in artifacthub.io/images must match release version (ghcr.io/eightynine01/mongodb-operator:1.0.0)
 - Release guide includes pre-release checklist with 5 categories (Code Quality, Documentation, Testing, Configuration, Security) with 25+ items
 - Git tag creation uses annotated tags with multi-line message documenting all features - recommended for stable releases
 - Docker multi-arch builds support linux/amd64 and linux/arm64 with buildx for cross-platform compatibility

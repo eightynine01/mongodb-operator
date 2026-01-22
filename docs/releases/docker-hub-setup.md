@@ -91,25 +91,25 @@ docker login -u eightynine01
 # 멀티아키텍처 이미지 빌드 및 푸시
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
-  --tag eightynine01/mongodb-operator:1.0.0 \
-  --tag eightynine01/mongodb-operator:latest \
+  --tag ghcr.io/eightynine01/mongodb-operator:1.0.0 \
+  --tag ghcr.io/eightynine01/mongodb-operator:latest \
   --push \
   .
 
 # 빌드 성공 확인
-docker manifest inspect eightynine01/mongodb-operator:1.0.0
+docker manifest inspect ghcr.io/eightynine01/mongodb-operator:1.0.0
 ```
 
 **간단한 단일 아키텍처 빌드:**
 
 ```bash
 # 로컬 아키텍처만 빌드 (빠름)
-docker build -t eightynine01/mongodb-operator:1.0.0 .
-docker tag eightynine01/mongodb-operator:1.0.0 eightynine01/mongodb-operator:latest
+docker build -t ghcr.io/eightynine01/mongodb-operator:1.0.0 .
+docker tag ghcr.io/eightynine01/mongodb-operator:1.0.0 ghcr.io/eightynine01/mongodb-operator:latest
 
 # Docker Hub에 푸시
-docker push eightynine01/mongodb-operator:1.0.0
-docker push eightynine01/mongodb-operator:latest
+docker push ghcr.io/eightynine01/mongodb-operator:1.0.0
+docker push ghcr.io/eightynine01/mongodb-operator:latest
 ```
 
 ## GitHub Actions 워크플로우 재실행
@@ -143,11 +143,11 @@ MongoDB Operator는 다음 태그를 사용합니다:
 
 ```bash
 # 버전별 태그
-eightynine01/mongodb-operator:1.0.0
+ghcr.io/eightynine01/mongodb-operator:1.0.0
 eightynine01/mongodb-operator:0.0.7
 
 # 최신 태그
-eightynine01/mongodb-operator:latest
+ghcr.io/eightynine01/mongodb-operator:latest
 
 # 개발 태그 (main 브랜치 커밋 시)
 eightynine01/mongodb-operator:dev
@@ -166,13 +166,13 @@ eightynine01/mongodb-operator:sha-b35177c
 
 ```bash
 # Docker Hub에서 이미지 확인
-docker pull eightynine01/mongodb-operator:1.0.0
+docker pull ghcr.io/eightynine01/mongodb-operator:1.0.0
 
 # 이미지 정보 확인
-docker inspect eightynine01/mongodb-operator:1.0.0
+docker inspect ghcr.io/eightynine01/mongodb-operator:1.0.0
 
 # 멀티아키텍처 매니페스트 확인
-docker manifest inspect eightynine01/mongodb-operator:1.0.0 | jq '.manifests[].platform'
+docker manifest inspect ghcr.io/eightynine01/mongodb-operator:1.0.0 | jq '.manifests[].platform'
 
 # 예상 출력:
 # {
@@ -217,7 +217,7 @@ gh secret set DOCKER_PASSWORD
 ```bash
 # 로컬에서 빌드 및 푸시
 docker buildx build --platform linux/amd64,linux/arm64 \
-  -t eightynine01/mongodb-operator:1.0.0 --push .
+  -t ghcr.io/eightynine01/mongodb-operator:1.0.0 --push .
 ```
 
 ### 문제 3: "rate limit exceeded"
@@ -228,7 +228,7 @@ docker buildx build --platform linux/amd64,linux/arm64 \
 ```bash
 # 인증된 상태에서 pull
 docker login -u eightynine01
-docker pull eightynine01/mongodb-operator:1.0.0
+docker pull ghcr.io/eightynine01/mongodb-operator:1.0.0
 
 # 또는 GitHub Container Registry 사용 고려
 # (향후 구현 예정)
