@@ -337,7 +337,7 @@ jobs:
       - helm-package
       - extract-release-notes
     permissions:
-  packages: write
+      packages: write
       contents: write
     steps:
       - name: Checkout code
@@ -396,7 +396,7 @@ jobs:
       - helm-package
       - create-release
     permissions:
-  packages: write
+      packages: write
       contents: write
     steps:
       - name: Checkout code
