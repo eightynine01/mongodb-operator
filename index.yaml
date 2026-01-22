@@ -4,6 +4,141 @@ entries:
   - annotations:
       artifacthub.io/category: database
       artifacthub.io/changes: |
+        - kind: changed
+          description: "BREAKING: Migrated from Docker Hub to GitHub Container Registry (ghcr.io)"
+        - kind: added
+          description: E2E testing framework with comprehensive test scripts
+        - kind: added
+          description: Extended roadmap with MongoDB Enterprise feature comparison
+        - kind: added
+          description: GHCR setup and migration documentation
+        - kind: fixed
+          description: GitHub Actions Docker build automation (no external secrets needed)
+      artifacthub.io/containsSecurityUpdates: "false"
+      artifacthub.io/crds: |
+        - kind: MongoDB
+          version: v1alpha1
+          name: mongodbs.mongodb.keiailab.com
+          displayName: MongoDB ReplicaSet
+          description: Deploys and manages a MongoDB ReplicaSet cluster
+        - kind: MongoDBSharded
+          version: v1alpha1
+          name: mongodbshardeds.mongodb.keiailab.com
+          displayName: MongoDB Sharded Cluster
+          description: Deploys and manages a MongoDB Sharded cluster with config servers, shards, and mongos routers
+        - kind: MongoDBBackup
+          version: v1alpha1
+          name: mongodbbackups.mongodb.keiailab.com
+          displayName: MongoDB Backup
+          description: Creates and manages MongoDB backups to S3 or PVC storage
+      artifacthub.io/crdsExamples: |
+        - apiVersion: mongodb.keiailab.com/v1alpha1
+          kind: MongoDB
+          metadata:
+            name: my-mongodb
+            namespace: database
+          spec:
+            members: 3
+            version:
+              version: "8.2"
+            storage:
+              storageClassName: standard
+              size: 10Gi
+            auth:
+              mechanism: SCRAM-SHA-256
+              adminCredentialsSecretRef:
+                name: mongodb-admin
+            monitoring:
+              enabled: true
+        - apiVersion: mongodb.keiailab.com/v1alpha1
+          kind: MongoDBSharded
+          metadata:
+            name: my-sharded
+            namespace: database
+          spec:
+            version:
+              version: "8.2"
+            configServer:
+              members: 3
+              storage:
+                size: 5Gi
+            shards:
+              count: 2
+              membersPerShard: 3
+              storage:
+                size: 20Gi
+            mongos:
+              replicas: 2
+        - apiVersion: mongodb.keiailab.com/v1alpha1
+          kind: MongoDBBackup
+          metadata:
+            name: my-backup
+            namespace: database
+          spec:
+            clusterRef:
+              name: my-mongodb
+              kind: MongoDB
+            type: full
+            compression: true
+            storage:
+              type: s3
+              s3:
+                bucket: mongodb-backups
+                endpoint: https://s3.amazonaws.com
+                credentialsRef:
+                  name: s3-credentials
+      artifacthub.io/images: |
+        - name: mongodb-operator
+          image: ghcr.io/eightynine01/mongodb-operator:1.0.1
+        - name: mongodb
+          image: mongo:8.2
+        - name: mongodb-exporter
+          image: percona/mongodb_exporter:0.40
+      artifacthub.io/license: Apache-2.0
+      artifacthub.io/links: |
+        - name: Documentation
+          url: https://github.com/keiailab/mongodb-operator/blob/main/README.md
+        - name: Source Code
+          url: https://github.com/keiailab/mongodb-operator
+        - name: MongoDB Documentation
+          url: https://www.mongodb.com/docs/
+      artifacthub.io/operatorCapabilities: Full Lifecycle
+      artifacthub.io/prerelease: "false"
+      artifacthub.io/recommendations: |
+        - url: https://artifacthub.io/packages/helm/prometheus-community/kube-prometheus-stack
+        - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
+    apiVersion: v2
+    appVersion: 1.0.1
+    created: "2026-01-22T13:12:57.094336252Z"
+    description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded
+      Clusters (v1.0.0 GA Release)
+    digest: a0123c631cf84fdde5395233ee87d0241f7b4dd4c56316af3110565a1db18080
+    home: https://github.com/keiailab/mongodb-operator
+    icon: https://raw.githubusercontent.com/mongodb/mongo/master/docs/leaf.svg
+    keywords:
+    - mongodb
+    - database
+    - nosql
+    - operator
+    - replicaset
+    - sharded-cluster
+    - backup
+    - kubernetes
+    kubeVersion: '>=1.26.0-0'
+    maintainers:
+    - email: support@keiailab.com
+      name: Keiailab
+      url: https://keiailab.com
+    name: mongodb-operator
+    sources:
+    - https://github.com/keiailab/mongodb-operator
+    type: application
+    urls:
+    - https://eightynine01.github.io/mongodb-operator/mongodb-operator-1.0.1.tgz
+    version: 1.0.1
+  - annotations:
+      artifacthub.io/category: database
+      artifacthub.io/changes: |
         - kind: added
           description: Initial stable (GA) release with comprehensive CI/CD and documentation
         - kind: added
@@ -121,7 +256,7 @@ entries:
         - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
     apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-01-22T12:17:18.96003244Z"
+    created: "2026-01-22T13:12:57.09346312Z"
     description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded
       Clusters (v1.0.0 GA Release)
     digest: f65e9e57b254c2aaed0b42569cc61616c6048a714a0686180ace19712648f6d2
@@ -252,7 +387,7 @@ entries:
         - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
     apiVersion: v2
     appVersion: 0.0.7
-    created: "2026-01-22T12:17:18.958718173Z"
+    created: "2026-01-22T13:12:57.091996802Z"
     description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded
       Clusters
     digest: f4d0fb7cc01ecc4aeb659555596856faabf94de5c8d3be8bc42da6c6f9011aa0
@@ -381,7 +516,7 @@ entries:
         - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
     apiVersion: v2
     appVersion: 0.0.6
-    created: "2026-01-22T12:17:18.95727879Z"
+    created: "2026-01-22T13:12:57.090952952Z"
     description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded
       Clusters
     digest: 0cce9cf49f837b76e909bf9d7156e9ef049370b388d040142a719ea3623bb790
@@ -510,7 +645,7 @@ entries:
         - url: https://artifacthub.io/packages/helm/cert-manager/cert-manager
     apiVersion: v2
     appVersion: 0.0.5
-    created: "2026-01-22T12:17:18.956305071Z"
+    created: "2026-01-22T13:12:57.090049534Z"
     description: A Kubernetes Operator for managing MongoDB ReplicaSets and Sharded
       Clusters
     digest: fc383b1472a1840ffa50a5ee03b281cc0a0caea3511a0fc265472e9168b99f0a
@@ -666,4 +801,4 @@ entries:
     urls:
     - https://eightynine01.github.io/mongodb-operator/dist/mongodb-operator-0.0.2.tgz
     version: 0.0.2
-generated: "2026-01-22T12:17:18.949233288Z"
+generated: "2026-01-22T13:12:57.088962794Z"
