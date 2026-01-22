@@ -4,7 +4,7 @@ Thank you for your interest in contributing to MongoDB Operator! This document p
 
 ## Code of Conduct
 
-This project adheres to a Code of Conduct that all contributors are expected to follow. Please be respectful and constructive in your interactions with others.
+This project adheres to a Code of Conduct that all contributors are expected to follow. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) to understand our community standards and expectations.
 
 ## How to Contribute
 
@@ -63,15 +63,81 @@ We welcome feature requests! Please:
    make tools
    ```
 
-3. Run tests:
+3. Install pre-commit hooks (recommended):
+   ```bash
+   curl https://pre-commit.com/install.sh | sh
+   pre-commit install
+   ```
+
+4. Run tests:
    ```bash
    make test
    ```
 
-4. Run linting:
+5. Run linting:
    ```bash
    make lint
    ```
+
+### Pre-commit Hooks
+
+We use pre-commit to automatically check code quality before each commit. Hooks run automatically when you commit changes.
+
+#### Pre-commit Hooks
+
+- **trailing-whitespace**: Removes trailing whitespace from modified files
+- **go fmt**: Auto-formats Go code to gofmt standards
+- **go vet**: Runs go vet to find potential issues
+- **golangci-lint**: Runs comprehensive Go linter with sensible defaults
+- **go test**: Runs unit tests (`go test ./...`) to catch regressions
+- **commit-msg-trim**: Removes trailing whitespace from commit messages
+
+#### Installation
+
+```bash
+# Install pre-commit
+curl https://pre-commit.com/install.sh | sh
+
+# Enable pre-commit hooks
+pre-commit install
+```
+
+#### Usage
+
+Hooks run automatically before each commit. You can also run them manually:
+
+```bash
+# Check all files
+pre-commit run --all-files
+
+# Check only staged files
+pre-commit run
+
+# Update hooks to latest versions
+pre-commit autoupdate
+```
+
+If a hook fails:
+1. Review the error messages
+2. Fix the issues manually
+3. Stage the fixes with `git add .`
+4. Run `git commit` again
+
+#### Local Development Workflow
+
+```bash
+# Stage and commit with auto-hooks
+git add .
+git commit -m "feat: add new feature"
+
+# Pre-commit runs automatically:
+# 1. go fmt - formats Go code
+# 2. go vet - checks for issues
+# 3. golangci-lint - comprehensive linting
+# 4. go test - runs unit tests
+```
+
+If any hook fails, the commit is blocked. Fix the issues and try again.
 
 #### Making Changes
 

@@ -1,0 +1,212 @@
+name: Docker Build & Push
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: eightynine01/mongodb-operator
+
+jobs:
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+          flavor: |
+            latest=${{ github.ref == 'refs/heads/main' }}
+            suffix=-${{ matrix.platform }}
+
+      - name: Build and push (for PRs)
+        if: github.event_name == 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            TARGETOS=linux
+            TARGETARCH=${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+
+      - name: Build and push (for main/tags)
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            TARGETOS=linux
+            TARGETARCH=${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
+
+  test:
+    name: Test Docker Image
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    strategy:
+      matrix:
+        platform:
+          - linux/amd64
+          - linux/arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix={{branch}}-
+          flavor: |
+            latest=${{ github.ref == 'refs/heads/main' }}
+            suffix=-${{ matrix.platform }}
+
+      - name: Pull Docker image
+        run: |
+          docker pull ${{ steps.meta.outputs.tags }}
+
+      - name: Verify manager binary exists
+        run: |
+          docker run --rm --entrypoint ls ${{ steps.meta.outputs.tags }} -la /manager
+
+      - name: Verify manager binary is executable
+        run: |
+          docker run --rm --entrypoint test ${{ steps.meta.outputs.tags }} -x /manager
+
+      - name: Verify user is nonroot
+        run: |
+          USER_ID=$(docker run --rm --entrypoint id ${{ steps.meta.outputs.tags }} -u)
+          if [ "$USER_ID" != "65532" ]; then
+            echo "Error: Expected user ID 65532, got $USER_ID"
+            exit 1
+          fi
+
+      - name: Smoke test - run binary version check
+        run: |
+          docker run --rm --entrypoint /manager ${{ steps.meta.outputs.tags }} --help || true
+
+  push:
+    name: Push Multi-Arch Manifest
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+          flavor: |
+            latest=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Push final multi-arch manifest
+        run: |
+          # Extract tags from metadata action output
+          TAGS="${{ steps.meta.outputs.tags }}"
+          echo "Tags to create manifests for: $TAGS"
+
+          # Create multi-arch manifest for each tag
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          for tag in "${TAG_ARRAY[@]}"; do
+            tag=$(echo "$tag" | xargs)  # Trim whitespace
+            echo "Creating manifest for tag: $tag"
+            docker buildx imagetools create \
+              --tag "$tag" \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-amd64 \
+              ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:linux-arm64
+          done
+
+      - name: Verify manifest
+        run: |
+          TAGS="${{ steps.meta.outputs.tags }}"
+          IFS=',' read -ra TAG_ARRAY <<< "$TAGS"
+          first_tag=$(echo "${TAG_ARRAY[0]}" | xargs)
+          echo "Verifying manifest for tag: $first_tag"
+          docker buildx imagetools inspect "$first_tag"

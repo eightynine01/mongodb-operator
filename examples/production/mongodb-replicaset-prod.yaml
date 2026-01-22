@@ -1,0 +1,220 @@
+---
+# Production MongoDB ReplicaSet Example
+# Enterprise-grade deployment with full observability and security features
+# Features: 5-member replica set, resource limits, monitoring, TLS, PDB
+
+apiVersion: mongodb.keiailab.com/v1alpha1
+kind: MongoDB
+metadata:
+  name: my-mongodb-prod
+  namespace: database
+  labels:
+    app: mongodb
+    environment: production
+spec:
+  # Number of replica set members (5 for maximum availability)
+  members: 5
+
+  # MongoDB version
+  version:
+    version: "8.2"
+
+  # ReplicaSet name
+  replicaSetName: rs0
+
+  # Storage configuration
+  storage:
+    # Use fast SSD storage class for production
+    storageClassName: fast-ssd
+    size: 100Gi
+    dataDirPath: /data/db
+
+  # Resource requirements (production-grade)
+  resources:
+    requests:
+      cpu: "1"
+      memory: "4Gi"
+    limits:
+      cpu: "2"
+      memory: "8Gi"
+
+  # Authentication configuration
+  auth:
+    mechanism: SCRAM-SHA-256
+    # Reference to admin credentials secret (create before deployment)
+    adminCredentialsSecretRef:
+      name: mongodb-prod-admin
+    # Application users
+    users:
+      - name: appuser
+        db: admin
+        passwordSecretRef:
+          name: mongodb-prod-app
+          key: password
+        roles:
+          - name: readWrite
+            db: myapp
+          - name: dbAdmin
+            db: myapp
+
+  # TLS configuration with cert-manager
+  tls:
+    enabled: true
+    certManager:
+      # Update with your cert-manager issuer
+      issuerRef:
+        name: letsencrypt-prod
+        kind: ClusterIssuer
+      duration: "2160h"  # 90 days
+      renewBefore: "360h"  # 15 days
+
+  # Prometheus monitoring
+  monitoring:
+    enabled: true
+    serviceMonitor:
+      interval: "30s"
+      # Add labels to match your Prometheus ServiceMonitor selector
+      labels:
+        release: prometheus
+        app: mongodb
+    prometheusRules:
+      enabled: true
+    exporter:
+      image: percona/mongodb_exporter:0.40
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+
+  # Service configuration
+  service:
+    type: ClusterIP
+    # Add annotations for service mesh or ingress
+    annotations:
+      # Example for Istio
+      # traffic.sidecar.istio.io/includeInboundPorts: "27017"
+
+  # Pod configuration
+  pod:
+    # High priority for critical database pods
+    priorityClassName: system-cluster-critical
+    # Security context
+    securityContext:
+      fsGroup: 999
+      runAsUser: 999
+      runAsNonRoot: true
+    # Pod anti-affinity for high availability
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - my-mongodb-prod
+              topologyKey: kubernetes.io/hostname
+    # Toleration for dedicated database nodes
+    tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "database"
+        effect: "NoSchedule"
+    # Node selector for database nodes
+    nodeSelector:
+      node-type: database
+    # Topology spread constraints
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: my-mongodb-prod
+
+---
+# Pod Disruption Budget for high availability
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-mongodb-prod-pdb
+  namespace: database
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: my-mongodb-prod
+
+---
+# Network policy to restrict traffic to MongoDB
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-mongodb-prod-netpol
+  namespace: database
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: my-mongodb-prod
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - port: 27017
+          protocol: TCP
+      from:
+        - namespaceSelector:
+            matchLabels:
+              name: myapp
+        - namespaceSelector:
+            matchLabels:
+              name: prometheus
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+---
+# Admin credentials Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-prod-admin
+  namespace: database
+type: Opaque
+stringData:
+  username: admin
+  # Generate strong password: openssl rand -base64 32
+  password: "REPLACE_WITH_STRONG_PASSWORD"
+
+---
+# Application user credentials Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-prod-app
+  namespace: database
+type: Opaque
+stringData:
+  # Generate strong password: openssl rand -base64 32
+  password: "REPLACE_WITH_STRONG_PASSWORD"
+
+---
+# Namespace with labels
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: database
+  labels:
+    name: database
+    environment: production

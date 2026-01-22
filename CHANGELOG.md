@@ -14,6 +14,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Grafana dashboard templates
 - Shard scale-in support
 
+## [1.0.0] - 2026-01-21
+
+### Summary
+Initial stable (GA) release with comprehensive CI/CD, documentation, and examples. This release marks production-readiness of the MongoDB Operator with full enterprise-grade infrastructure for open source maintenance.
+
+### Breaking Changes
+None. This is a major release representing stabilization of the project with all features from previous pre-releases. No deprecations or breaking changes introduced.
+
+### New Features
+
+#### GitHub Repository Templates
+- Issue template with bug report, feature request, and documentation categories
+- Pull request template with checklist and contribution guidelines
+
+#### GitHub Actions CI/CD (5 Workflows)
+- `ci.yml`: Continuous integration with Go tests, linting, and Docker build verification
+- `docker-build.yml`: Automated Docker image building and pushing to Docker Hub
+- `release.yml`: Complete release automation for GitHub releases
+- `helm-publish.yml`: Helm chart packaging and publishing to gh-pages branch
+- `security.yml`: Comprehensive security scanning (dependencies, containers, licenses)
+
+#### Comprehensive Documentation (9 Documents)
+- `docs/ci-cd/overview.md`: CI/CD pipeline architecture and workflow descriptions
+- `docs/ci-cd/workflows.md`: Detailed workflow configuration and troubleshooting
+- `docs/ci-cd/release-process.md`: Automated release process documentation
+- `docs/ci-cd/testing-strategy.md`: Test coverage strategy and guidelines
+- `docs/ci-cd/quality-assurance.md`: Code quality standards and tooling
+- `docs/ci-cd/artifact-hub-integration.md`: Artifact Hub package registry setup
+- `docs/repository/github-settings.md`: GitHub repository configuration guide
+- `docs/repository/issue-management.md`: Issue tracking and triage guidelines
+- `docs/repository/pull-request-process.md`: Pull request workflow and review process
+
+#### Comprehensive Examples (7 Examples)
+- `examples/basic/mongodb-replicaset.yaml`: Simple 3-member ReplicaSet deployment
+- `examples/basic/mongodb-sharded.yaml`: Basic sharded cluster with 2 shards
+- `examples/production/mongodb-replicaset-resources.yaml`: ReplicaSet with production resource limits
+- `examples/production/mongodb-sharded-resources.yaml`: Sharded cluster with production resource limits
+- `examples/monitoring/mongodb-prometheus.yaml`: ReplicaSet with Prometheus monitoring enabled
+- `examples/monitoring/mongodb-sharded-prometheus.yaml`: Sharded cluster with Prometheus monitoring
+- `examples/backup/mongodb-backup-s3.yaml`: Backup configuration with S3 storage
+
+#### Artifact Hub Integration
+- Publisher configuration with repository ID (386b6255-6da7-4a73-8fc0-a8e79e3c7b90)
+- Artifact Hub annotations in Helm chart
+- Automatic metadata synchronization on releases
+
+#### Dependency Automation
+- Dependabot configuration for Go modules
+- Automatic dependency update PRs
+- Security vulnerability monitoring
+
+#### Pre-commit Hooks
+- Go code formatting with `gofmt`
+- Linting with `golangci-lint`
+- Shell script validation with `shellcheck`
+- Markdown linting with `markdownlint`
+- YAML formatting with `yamlfmt`
+- JSON validation with `jsonlint`
+- Trailing whitespace detection
+
+#### Code Coverage with Codecov
+- Automatic coverage upload on PRs
+- Coverage threshold enforcement
+- Badge integration in README
+
+#### Helm Repository Publishing
+- Automated chart packaging
+- gh-pages branch management
+- Helm repository index generation
+
+#### Security Scanning
+- Trivy vulnerability scanning for container images
+- Dependabot for dependency security
+- License compliance checking
+- SBOM and Provenance attestations
+
+#### Test Suite Strategy
+- Unit test coverage requirements
+- Integration test guidelines
+- E2E test examples
+- Coverage thresholds and goals
+
+#### GitHub Repository Settings
+- Branch protection rules (main branch)
+- Security policies and alerts
+- Team and collaborator access guidelines
+- Issue and PR template setup
+
+### Changed
+- Marked all features as production-ready and stable
+- Moved from pre-release (0.0.x) to stable (1.0.0) versioning
+- Added comprehensive release documentation and maintainers guide
+
+### Security
+- All container images use immutable SHA256 digests
+- SBOM and Provenance attestations enabled
+- Regular security scanning automated
+- CVE tracking and dependency updates automated
+
 ## [0.0.7] - 2026-01-05
 
 ### Security
@@ -116,7 +215,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/eightynine01/mongodb-operator/compare/v0.0.5...HEAD
+[Unreleased]: https://github.com/eightynine01/mongodb-operator/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/eightynine01/mongodb-operator/compare/v0.0.7...v1.0.0
+[0.0.7]: https://github.com/eightynine01/mongodb-operator/compare/v0.0.6...v0.0.7
+[0.0.6]: https://github.com/eightynine01/mongodb-operator/compare/v0.0.5...v0.0.6
 [0.0.5]: https://github.com/eightynine01/mongodb-operator/compare/v0.0.4...v0.0.5
 [0.0.4]: https://github.com/eightynine01/mongodb-operator/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/eightynine01/mongodb-operator/compare/v0.0.2...v0.0.3

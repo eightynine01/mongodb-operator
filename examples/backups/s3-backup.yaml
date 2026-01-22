@@ -1,0 +1,168 @@
+---
+# MongoDBBackup Example with S3 Storage
+# This example shows how to configure automated backups to S3-compatible storage
+
+apiVersion: mongodb.keiailab.com/v1alpha1
+kind: MongoDBBackup
+metadata:
+  name: my-mongodb-backup
+  namespace: database
+spec:
+  # Target cluster reference (replicaset)
+  clusterRef:
+    name: my-mongodb
+    kind: MongoDB
+
+  # Backup type: full or incremental
+  type: full
+
+  # Compression settings
+  compression: true
+  compressionType: gzip
+
+  # Storage configuration (S3)
+  storage:
+    type: s3
+    s3:
+      # S3 bucket name
+      bucket: mongodb-backups
+      # S3 endpoint (use AWS default or compatible storage like MinIO, Ceph)
+      # For AWS: https://s3.amazonaws.com
+      # For MinIO: http://minio-service:9000
+      endpoint: https://s3.amazonaws.com
+      # Region for the bucket
+      region: us-east-1
+      # Path prefix for backups (organizes backups in the bucket)
+      prefix: mongodb/my-mongodb/
+      # Reference to S3 credentials secret (create before deployment)
+      credentialsRef:
+        name: s3-credentials
+      # Skip TLS verification for self-signed certificates (use with caution)
+      insecureSkipTLS: false
+
+---
+# MongoDBBackup Example for Sharded Cluster with S3
+apiVersion: mongodb.keiailab.com/v1alpha1
+kind: MongoDBBackup
+metadata:
+  name: my-sharded-backup
+  namespace: database
+spec:
+  # Target cluster reference (sharded)
+  clusterRef:
+    name: my-sharded
+    kind: MongoDBSharded
+
+  type: full
+  compression: true
+  compressionType: zstd  # Better compression than gzip
+
+  storage:
+    type: s3
+    s3:
+      bucket: mongodb-backups
+      endpoint: https://s3.amazonaws.com
+      region: us-east-1
+      prefix: mongodb/sharded/my-sharded/
+      credentialsRef:
+        name: s3-credentials
+      insecureSkipTLS: false
+
+---
+# MongoDBBackup Example with PVC Storage
+apiVersion: mongodb.keiailab.com/v1alpha1
+kind: MongoDBBackup
+metadata:
+  name: my-mongodb-backup-pvc
+  namespace: database
+spec:
+  clusterRef:
+    name: my-mongodb
+    kind: MongoDB
+
+  type: full
+  compression: true
+  compressionType: gzip
+
+  storage:
+    type: pvc
+    pvc:
+      # Storage class for the backup PVC
+      storageClassName: standard
+      # Size of the backup PVC
+      size: 100Gi
+
+---
+# S3 Credentials Secret
+# Create this secret before deploying MongoDBBackup resources
+# For AWS, create IAM user with s3:PutObject, s3:GetObject, s3:ListBucket permissions
+apiVersion: v1
+kind: Secret
+metadata:
+  name: s3-credentials
+  namespace: database
+type: Opaque
+stringData:
+  # AWS Access Key ID (or MinIO access key)
+  access-key: "YOUR_ACCESS_KEY_ID"
+  # AWS Secret Access Key (or MinIO secret key)
+  secret-key: "YOUR_SECRET_ACCESS_KEY"
+
+---
+# Example CronJob for Scheduled Backups
+# The MongoDBBackup operator creates on-demand backups
+# Use this CronJob to create backups on a schedule
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mongodb-daily-backup
+  namespace: database
+spec:
+  # Run daily at 2 AM UTC
+  schedule: "0 2 * * *"
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup-creator
+              image: bitnami/kubectl:latest
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  # Generate a unique backup name with timestamp
+                  BACKUP_NAME="my-mongodb-backup-$(date +%Y%m%d-%H%M%S)"
+                  # Create the MongoDBBackup resource
+                  kubectl apply -f - <<EOF
+                  apiVersion: mongodb.keiailab.com/v1alpha1
+                  kind: MongoDBBackup
+                  metadata:
+                    name: ${BACKUP_NAME}
+                    namespace: database
+                  spec:
+                    clusterRef:
+                      name: my-mongodb
+                      kind: MongoDB
+                    type: full
+                    compression: true
+                    compressionType: gzip
+                    storage:
+                      type: s3
+                      s3:
+                        bucket: mongodb-backups
+                        endpoint: https://s3.amazonaws.com
+                        region: us-east-1
+                        prefix: mongodb/daily/
+                        credentialsRef:
+                          name: s3-credentials
+                  EOF
+                  echo "Created backup job: ${BACKUP_NAME}"
+              env:
+                - name: KUBERNETES_SERVICE_HOST
+                  value: ""
+                - name: KUBERNETES_SERVICE_PORT
+                  value: ""

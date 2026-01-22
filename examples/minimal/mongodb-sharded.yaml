@@ -1,0 +1,125 @@
+---
+# Minimal MongoDB Sharded Cluster Example
+# Production-ready but simplified configuration for moderate workloads
+# Features: 2 shards (3 members each), config server (3 members), mongos (2 replicas)
+
+apiVersion: mongodb.keiailab.com/v1alpha1
+kind: MongoDBSharded
+metadata:
+  name: my-sharded
+  namespace: database
+spec:
+  # MongoDB version
+  version:
+    version: "8.2"
+
+  # Config server configuration (required for sharded clusters)
+  configServer:
+    # 3 members for high availability
+    members: 3
+    storage:
+      # Update to match your cluster's storage class
+      storageClassName: standard
+      size: 5Gi
+      dataDirPath: /data/configdb
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "1Gi"
+
+  # Shard configuration
+  shards:
+    # Number of shards (adjust based on your data size and query patterns)
+    count: 2
+    # Members per shard (3 for high availability)
+    membersPerShard: 3
+    storage:
+      # Update to match your cluster's storage class
+      storageClassName: standard
+      size: 50Gi
+      dataDirPath: /data/db
+    resources:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+
+  # Mongos router configuration
+  mongos:
+    # 2 replicas for high availability
+    replicas: 2
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+    service:
+      # ClusterIP for internal access (use LoadBalancer for external)
+      type: ClusterIP
+      port: 27017
+
+  # Authentication configuration
+  auth:
+    mechanism: SCRAM-SHA-256
+    # Reference to admin credentials secret (create before deployment)
+    adminCredentialsSecretRef:
+      name: mongodb-sharded-admin
+    # Optional: Create application users
+    users:
+      - name: appuser
+        db: admin
+        passwordSecretRef:
+          name: mongodb-sharded-app
+          key: password
+        roles:
+          - name: readWrite
+            db: myapp
+
+  # Pod configuration
+  pod:
+    securityContext:
+      fsGroup: 999
+      runAsUser: 999
+      runAsNonRoot: true
+
+---
+# Admin credentials Secret
+# Create this secret before deploying the MongoDBSharded resource
+# IMPORTANT: Use strong passwords in production!
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-sharded-admin
+  namespace: database
+type: Opaque
+stringData:
+  username: admin
+  # Replace with strong password in production
+  password: "change-me-in-production"
+
+---
+# Application user credentials Secret
+# Create this secret before deploying the MongoDBSharded resource
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-sharded-app
+  namespace: database
+type: Opaque
+stringData:
+  # Replace with strong password in production
+  password: "app-password-change-me"
+
+---
+# Namespace (optional - create if namespace doesn't exist)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: database

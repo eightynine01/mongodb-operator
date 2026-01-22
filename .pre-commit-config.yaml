@@ -1,0 +1,106 @@
+# Pre-commit hooks configuration for MongoDB Operator
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+
+default_language_version:
+  go: "1.25"
+
+fail_fast: false
+
+minimum_pre_commit_version: "3.0.0"
+
+# Configuration for pre-commit hooks
+ci:
+  autofix_prs: true
+  autofix_commit_msg: "style: auto-fix pre-commit issues"
+  autoupdate_branch: ""
+  autoupdate_commit_msg: "chore: pre-commit autoupdate"
+  autoupdate_schedule: weekly
+  skip: []
+  submodules: false
+
+repos:
+  # Pre-commit hooks for basic file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim trailing whitespace
+        description: Removes trailing whitespace from modified files
+        args: [--markdown-linebreak-ext=md]
+
+      - id: end-of-file-fixer
+        name: Fix end of files
+        description: Ensures that a file is either empty or ends with one newline
+
+      - id: check-yaml
+        name: Check YAML files
+        description: Checks YAML files for syntax errors
+        args: [--unsafe]
+
+      - id: check-added-large-files
+        name: Check for large files
+        description: Prevents large files from being committed
+        args: ['--maxkb=1000']
+
+      - id: check-case-conflict
+        name: Check for case conflicts
+        description: Checks for files that would conflict in case-insensitive filesystems
+
+      - id: check-merge-conflict
+        name: Check for merge conflicts
+        description: Checks for files that contain merge conflict strings
+
+      - id: check-toml
+        name: Check TOML files
+        description: Checks TOML files for syntax errors
+
+  # Golang hooks for Go code quality
+  - repo: https://github.com/golangci/golangci-lint
+    rev: v1.62.2
+    hooks:
+      - id: golangci-lint
+        name: golangci-lint
+        description: Run golangci-lint with sensible defaults
+        entry: golangci-lint run --fix
+        types: [go]
+        language: golang
+        require_serial: true
+        pass_filenames: false
+
+  # Go-specific hooks from pre-commit
+  - repo: local
+    hooks:
+      - id: go-fmt
+        name: go fmt
+        description: Auto-formats Go code to gofmt standards
+        entry: gofmt -w
+        language: system
+        types: [go]
+
+      - id: go-vet
+        name: go vet
+        description: Runs go vet to find potential issues
+        entry: go vet ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+
+      - id: go-test
+        name: go test
+        description: Runs unit tests (`go test ./...`) to catch regressions
+        entry: go test -v -race ./...
+        language: system
+        types: [go]
+        pass_filenames: false
+        always_run: false
+
+  # Commit message hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        name: Trim commit message whitespace
+        description: Removes trailing whitespace from commit messages
+        stages: [commit-msg]
+        types: [text]

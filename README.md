@@ -3,6 +3,11 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://golang.org/)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-1.26+-326CE5?logo=kubernetes)](https://kubernetes.io/)
+[![Build Status](https://github.com/eightynine01/mongodb-operator/actions/workflows/ci.yml/badge.svg)](https://github.com/eightynine01/mongodb-operator/actions)
+[![Docker Image Size](https://img.shields.io/docker/image-size/eightynine01/mongodb-operator/latest)](https://hub.docker.com/r/eightynine01/mongodb-operator)
+[![Helm Chart](https://img.shields.io/badge/dynamic/yaml?url=https://raw.githubusercontent.com/eightynine01/mongodb-operator/main/charts/mongodb-operator/Chart.yaml&label=helm%20v)](https://github.com/eightynine01/mongodb-operator)
+[![Go Report Card](https://goreportcard.com/badge/github.com/eightynine01/mongodb-operator)](https://goreportcard.com/report/github.com/eightynine01/mongodb-operator)
+[![codecov](https://codecov.io/gh/eightynine01/mongodb-operator/branch/main/graph/badge.svg)](https://codecov.io/gh/eightynine01/mongodb-operator)
 
 A Kubernetes Operator for deploying and managing MongoDB ReplicaSets and Sharded Clusters.
 

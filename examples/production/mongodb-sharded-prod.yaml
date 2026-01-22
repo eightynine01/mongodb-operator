@@ -1,0 +1,302 @@
+---
+# Production MongoDB Sharded Cluster Example
+# Enterprise-grade deployment with full observability and security features
+# Features: 3 shards (3 members each), config server (3 members), HA mongos (3 replicas)
+
+apiVersion: mongodb.keiailab.com/v1alpha1
+kind: MongoDBSharded
+metadata:
+  name: my-sharded-prod
+  namespace: database
+  labels:
+    app: mongodb
+    environment: production
+spec:
+  # MongoDB version
+  version:
+    version: "8.2"
+
+  # Config server configuration
+  configServer:
+    # 3 members for high availability
+    members: 3
+    storage:
+      # Use fast SSD storage class for production
+      storageClassName: fast-ssd
+      size: 50Gi
+      dataDirPath: /data/configdb
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "1"
+        memory: "4Gi"
+
+  # Shard configuration
+  shards:
+    # 3 shards for horizontal scaling
+    count: 3
+    # 3 members per shard for high availability
+    membersPerShard: 3
+    storage:
+      # Use fast SSD storage class for production
+      storageClassName: fast-ssd
+      size: 100Gi
+      dataDirPath: /data/db
+    resources:
+      requests:
+        cpu: "1"
+        memory: "4Gi"
+      limits:
+        cpu: "2"
+        memory: "8Gi"
+    # Optional: Auto-scaling for shards
+    autoScaling:
+      enabled: false
+      minShards: 2
+      maxShards: 10
+      metrics:
+        - type: custom
+          target: 80
+          customMetric:
+            name: mongodb_sharding_chunks_total
+
+  # Mongos router configuration
+  mongos:
+    # 3 replicas for high availability
+    replicas: 3
+    resources:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "1"
+        memory: "2Gi"
+    service:
+      # LoadBalancer for external access (or use ClusterIP with ingress)
+      type: LoadBalancer
+      port: 27017
+      # Add annotations for cloud-specific LB
+      annotations:
+        # Example for AWS NLB
+        # service.beta.kubernetes.io/aws-load-balancer-type: nlb
+    # Auto-scaling for mongos
+    autoScaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      metrics:
+        - type: cpu
+          target: 70
+        - type: memory
+          target: 80
+
+  # Authentication configuration
+  auth:
+    mechanism: SCRAM-SHA-256
+    adminCredentialsSecretRef:
+      name: mongodb-sharded-prod-admin
+    users:
+      - name: appuser
+        db: admin
+        passwordSecretRef:
+          name: mongodb-sharded-prod-app
+          key: password
+        roles:
+          - name: readWrite
+            db: myapp
+          - name: dbAdmin
+            db: myapp
+
+  # TLS configuration with cert-manager
+  tls:
+    enabled: true
+    certManager:
+      # Update with your cert-manager issuer
+      issuerRef:
+        name: letsencrypt-prod
+        kind: ClusterIssuer
+      duration: "2160h"  # 90 days
+      renewBefore: "360h"  # 15 days
+
+  # Prometheus monitoring
+  monitoring:
+    enabled: true
+    serviceMonitor:
+      interval: "30s"
+      labels:
+        release: prometheus
+        app: mongodb
+    prometheusRules:
+      enabled: true
+    exporter:
+      image: percona/mongodb_exporter:0.40
+      resources:
+        requests:
+          cpu: "100m"
+          memory: "128Mi"
+        limits:
+          cpu: "500m"
+          memory: "512Mi"
+
+  # Pod configuration
+  pod:
+    # High priority for critical database pods
+    priorityClassName: system-cluster-critical
+    # Security context
+    securityContext:
+      fsGroup: 999
+      runAsUser: 999
+      runAsNonRoot: true
+    # Pod anti-affinity for high availability
+    affinity:
+      podAntiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                  - key: app.kubernetes.io/name
+                    operator: In
+                    values:
+                      - my-sharded-prod
+              topologyKey: kubernetes.io/hostname
+      # Node affinity for database nodes
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: node-type
+                  operator: In
+                  values:
+                    - database
+    # Toleration for dedicated database nodes
+    tolerations:
+      - key: "dedicated"
+        operator: "Equal"
+        value: "database"
+        effect: "NoSchedule"
+    # Topology spread constraints
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: my-sharded-prod
+
+---
+# Pod Disruption Budget for config server
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-sharded-prod-config-pdb
+  namespace: database
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: configserver
+      app.kubernetes.io/name: my-sharded-prod
+
+---
+# Pod Disruption Budget for shards
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-sharded-prod-shards-pdb
+  namespace: database
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: shard
+      app.kubernetes.io/name: my-sharded-prod
+
+---
+# Pod Disruption Budget for mongos
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: my-sharded-prod-mongos-pdb
+  namespace: database
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: mongos
+      app.kubernetes.io/name: my-sharded-prod
+
+---
+# Network policy to restrict traffic to MongoDB
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: my-sharded-prod-netpol
+  namespace: database
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: my-sharded-prod
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - ports:
+        - port: 27017
+          protocol: TCP
+        - port: 27018
+          protocol: TCP
+        - port: 27019
+          protocol: TCP
+      from:
+        - namespaceSelector:
+            matchLabels:
+              name: myapp
+        - namespaceSelector:
+            matchLabels:
+              name: prometheus
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+
+---
+# Admin credentials Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-sharded-prod-admin
+  namespace: database
+type: Opaque
+stringData:
+  username: admin
+  # Generate strong password: openssl rand -base64 32
+  password: "REPLACE_WITH_STRONG_PASSWORD"
+
+---
+# Application user credentials Secret
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mongodb-sharded-prod-app
+  namespace: database
+type: Opaque
+stringData:
+  # Generate strong password: openssl rand -base64 32
+  password: "REPLACE_WITH_STRONG_PASSWORD"
+
+---
+# Namespace with labels
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: database
+  labels:
+    name: database
+    environment: production
